@@ -31,13 +31,18 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 		return json({ message: 'Team ID is required' }, { status: 400 });
 	}
 	
-	const server = await updateServer(params.uuid, teamId, body);
+	try {
+		const server = await updateServer(params.uuid, teamId, body);
 
-	if (!server) {
-		return json({ message: 'Server not found or update failed' }, { status: 404 });
+		if (!server) {
+			return json({ message: 'Server not found or update failed' }, { status: 404 });
+		}
+
+		return json({ data: server });
+	} catch (err: any) {
+		console.error('[API] Error updating server:', err);
+		return json({ message: err.message || 'Failed to update server' }, { status: 500 });
 	}
-
-	return json({ data: server });
 };
 
 export const DELETE: RequestHandler = async ({ params, locals }) => {

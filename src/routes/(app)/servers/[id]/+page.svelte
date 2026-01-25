@@ -12,7 +12,9 @@
 		forceUpdateService,
 		getAppStatus,
 		proxyAction,
-		checkReadiness
+		checkReadiness,
+		installPrivateKeyRemote,
+		updateVpsApiKeyRemote
 	} from './server.remote';
 	import {
 		getServerStatus,
@@ -34,6 +36,8 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import * as Sheet from '$lib/components/ui/sheet/index.js';
+
 	import {
 		Table,
 		TableHeader,
@@ -62,8 +66,9 @@
 		Play,
 		Square,
 		Loader2,
-		CircleCheck,
 		CircleAlert,
+		CheckCircle2,
+		AlertCircle,
 		RefreshCw,
 		ExternalLink,
 		Activity,
@@ -134,10 +139,13 @@
 	let isRestartingAgent = $state(false);
 	let isRebootingServer = $state(false);
 	let isRebootDialogOpen = $state(false);
+	let logScrollContainer2 = $state<HTMLDivElement | null>(null);
 	let selectedRebootType = $state<'intelligent' | 'graceful' | 'hard' | null>(null);
 	let installProgress = $state<
 		{ step: string; message: string; status: 'pending' | 'in-progress' | 'success' | 'error' }[]
 	>([]);
+	let installLogs = $state('');
+	let showInstallLogs = $state(false);
 	let showDeleteDialog = $state(false);
 	let newTag = $state('');
 	// Initialize with data.tunnelUrl if present, OR keep existing if re-navigating
@@ -186,6 +194,76 @@
 	let isRetrievingPassword = $state(false);
 	let isReinstallDialogOpen = $state(false);
 	let isReinstalling = $state(false);
+	let showVpsUpdateSheet = $state(false);
+	let newVpsApiKey = $state('');
+	let isUpdatingVpsKey = $state(false);
+
+	async function handleUpdateVpsKey() {
+		if (!newVpsApiKey) {
+			toastStore.error('Please enter the API key');
+			return;
+		}
+		isUpdatingVpsKey = true;
+		try {
+			const result = await updateVpsApiKeyRemote({
+				providerId: server.vpsProviderId!,
+				apiKey: newVpsApiKey
+			});
+			if (result.success) {
+				toastStore.success(result.message || 'API key updated successfully');
+				showVpsUpdateSheet = false;
+				newVpsApiKey = '';
+				await invalidateAll();
+			} else {
+				toastStore.error(result.message || 'Failed to update API key');
+			}
+		} catch (err: any) {
+			toastStore.error(err.message || 'Update failed');
+		} finally {
+			isUpdatingVpsKey = false;
+		}
+	}
+
+	function checkVpsError(message: string) {
+		if (message?.includes('Cloud Provider Unauthorized')) {
+			showVpsUpdateSheet = true;
+		}
+	}
+	let serverPassword = $state('');
+	let isInstallingKey = $state(false);
+
+	async function handleInstallKeyViaPassword() {
+		if (!serverPassword) {
+			toastStore.error('Please enter the server password');
+			return;
+		}
+		isInstallingKey = true;
+		try {
+			const result = await installPrivateKeyRemote({
+				serverId: server.id,
+				password: serverPassword
+			});
+			if (result.success) {
+				toastStore.success(result.message || 'Deployment key installed successfully');
+				serverPassword = '';
+
+				// Optimistically update the key ID if returned
+				if (result.data?.privateKeyId) {
+					server.privateKeyId = result.data.privateKeyId;
+				}
+
+				await invalidateAll();
+			} else {
+				const msg = result.message || 'Failed to install key';
+				toastStore.error(msg);
+				checkVpsError(msg);
+			}
+		} catch (err: any) {
+			toastStore.error(err.message || 'Key installation failed');
+		} finally {
+			isInstallingKey = false;
+		}
+	}
 
 	async function handleDiagnose() {
 		isDiagnosing = true;
@@ -196,7 +274,9 @@
 				diagnosticsOutput = result.output || '';
 				showDiagnostics = true;
 			} else {
-				toastStore.error(result.message || 'Diagnostics failed');
+				const msg = result.message || 'Diagnostics failed';
+				toastStore.error(msg);
+				checkVpsError(msg);
 			}
 		} catch (err: any) {
 			toastStore.error(err.message || 'Failed to run diagnostics');
@@ -282,12 +362,12 @@
 				name: server.name,
 				description: server.description,
 				ip: server.ip,
-				ipv6: server.ipv6,
-				port: server.port,
+				ipv6: server.ipv6 || null,
+				port: Number(server.port),
 				user: server.user,
-				privateKeyId: server.privateKeyId,
-				cloudflareTunnelHostname: server.cloudflareTunnelHostname,
-				cloudflareAccessTokenId: server.cloudflareAccessTokenId,
+				privateKeyId: server.privateKeyId || null,
+				cloudflareTunnelHostname: server.cloudflareTunnelHostname || null,
+				cloudflareAccessTokenId: server.cloudflareAccessTokenId || null,
 				// Ensure tags is strictly an array of strings, defaulting to empty
 				tags: Array.isArray(server.tags) ? [...server.tags] : []
 			};
@@ -295,7 +375,7 @@
 			await serversApi.update(server.id, payload);
 			toastStore.success('Server settings saved');
 		} catch (error: any) {
-			toastStore.error('Failed to save settings');
+			toastStore.error(error.response?.data?.message || error.message || 'Failed to save settings');
 		} finally {
 			isSaving = false;
 		}
@@ -377,6 +457,7 @@
 
 	async function handleInstallAgent() {
 		isInstallingAgent = true;
+		installLogs = ''; // Reset logs
 		installProgress = [
 			{ step: 'connecting', message: 'Connecting to server...', status: 'pending' },
 			{ step: 'detecting', message: 'Detecting system configuration...', status: 'pending' },
@@ -420,6 +501,13 @@
 									}
 									installProgress[index].status = 'in-progress';
 									installProgress[index].message = data.message;
+								} else if (data.step === 'log') {
+									installLogs += data.message;
+									setTimeout(() => {
+										if (logScrollContainer2) {
+											logScrollContainer2.scrollTop = logScrollContainer2.scrollHeight;
+										}
+									}, 0);
 								} else if (data.step === 'complete') {
 									installProgress.forEach((p) => (p.status = 'success'));
 									server.connectionType = 'agent';
@@ -647,7 +735,7 @@
 	}
 
 	let debugLogs = $state('');
-	let logEventSource = $state<EventSource | null>(null);
+	let logEventSource: EventSource | null = null;
 	let hasConnected = $state(false);
 	let logScrollContainer = $state<HTMLDivElement | null>(null);
 
@@ -1129,9 +1217,10 @@
 														toastStore.success('Server reinstall initiated');
 														server.status = 'reinstalling';
 													} else if (result.type === 'failure') {
-														toastStore.error(
-															(result.data?.message as string) || 'Failed to reinstall server'
-														);
+														const msg =
+															(result.data?.message as string) || 'Failed to reinstall server';
+														toastStore.error(msg);
+														checkVpsError(msg);
 													} else if (result.type === 'error') {
 														toastStore.error('An unexpected error occurred');
 													}
@@ -1364,7 +1453,7 @@
 													<Input
 														id="cfHostname"
 														bind:value={server.cloudflareTunnelHostname}
-														placeholder="e.g. pve.maietta.org"
+														placeholder="e.g. tunnel.example.com"
 													/>
 													<p class="text-muted-foreground text-[10px]">
 														Connecting via tunnel bypasses firewalls.
@@ -1389,74 +1478,116 @@
 											</div>
 										</div>
 
-										{#if !server.privateKeyId && server.vpsProviderId}
+										{#if !server.privateKeyId}
 											<div
-												class="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/20"
+												class="border-warning-border bg-warning mt-2 space-y-4 rounded-lg border p-4 transition-colors"
 											>
 												<div class="flex items-start gap-3">
-													<ShieldAlert
-														class="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-500"
-													/>
-													<div class="flex-1 space-y-3">
+													<ShieldAlert class="text-warning-muted mt-0.5 size-5 shrink-0" />
+													<div class="flex-1 space-y-4">
 														<div>
-															<p class="text-sm font-medium text-amber-900 dark:text-amber-100">
+															<p class="text-warning-foreground text-sm font-medium">
 																No deployment key configured
 															</p>
-															<p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
-																This server is linked to a cloud provider but doesn't have an SSH
-																key. You can auto-generate one and reinstall the server, or retrieve
-																the password for manual setup.
+															<p class="text-warning-foreground/80 mt-1 text-xs">
+																A deployment key is required for SelfHost to manage this server. You
+																can install an auto-generated key using a password, or use
+																provider-specific options below.
 															</p>
 														</div>
-														<div class="flex flex-wrap gap-2">
-															<Button
-																variant="default"
-																size="sm"
-																onclick={() => (isReinstallDialogOpen = true)}
-																disabled={isReinstalling}
-																class="bg-amber-600 text-white hover:bg-amber-700"
-															>
-																{#if isReinstalling}
-																	<Loader2 class="mr-2 size-3 animate-spin" />
-																	Reinstalling...
-																{:else}
-																	<Key class="mr-2 size-3" />
-																	Auto-Generate Key & Reinstall
-																{/if}
-															</Button>
-															<Button
-																variant="outline"
-																size="sm"
-																onclick={async () => {
-																	isRetrievingPassword = true;
-																	const formData = new FormData();
-																	const response = await fetch(
-																		`/servers/${server.id}?/retrievePassword`,
-																		{
-																			method: 'POST',
-																			body: formData
-																		}
-																	);
-																	const result = await response.json();
-																	if (result.type === 'success' && result.data?.password) {
-																		retrievedPassword = result.data.password;
-																		toastStore.success('Password retrieved successfully');
-																	} else {
-																		toastStore.error(
-																			result.data?.message || 'Failed to retrieve password'
-																		);
-																	}
-																	isRetrievingPassword = false;
-																}}
-																disabled={isRetrievingPassword}
-															>
-																{#if isRetrievingPassword}
-																	<Loader2 class="mr-2 size-3 animate-spin" />
-																{:else}
-																	<Key class="mr-2 size-3" />
-																{/if}
-																Retrieve Password
-															</Button>
+
+														<div class="flex flex-col gap-3">
+															<div class="flex max-w-sm flex-col gap-2">
+																<Label
+																	for="serverPassword"
+																	class="text-warning-muted text-xs font-semibold uppercase"
+																	>Server Root/User Password</Label
+																>
+																<div class="flex gap-2">
+																	<Input
+																		id="serverPassword"
+																		type="password"
+																		bind:value={serverPassword}
+																		placeholder="Enter password..."
+																		class="bg-warning-foreground/5 border-warning-border text-warning-foreground placeholder:text-warning-foreground/40 focus-visible:ring-warning-muted"
+																	/>
+																	<Button
+																		size="sm"
+																		onclick={handleInstallKeyViaPassword}
+																		disabled={isInstallingKey}
+																		class="bg-amber-600 hover:bg-amber-700"
+																	>
+																		{#if isInstallingKey}
+																			<Loader2 class="size-3 animate-spin" />
+																		{:else}
+																			<Key class="mr-2 size-3" />
+																			Generate and Install Key
+																		{/if}
+																	</Button>
+																</div>
+															</div>
+
+															{#if server.vpsProviderId}
+																<div class="border-warning-border border-t pt-2">
+																	<p
+																		class="text-warning-muted mb-3 text-[10px] font-bold uppercase"
+																	>
+																		Provider Actions
+																	</p>
+																	<div class="flex flex-wrap gap-2">
+																		<Button
+																			variant="outline"
+																			size="sm"
+																			onclick={() => (isReinstallDialogOpen = true)}
+																			disabled={isReinstalling}
+																			class="border-warning-border bg-warning-foreground/5 text-warning-foreground hover:bg-warning-foreground/10"
+																		>
+																			{#if isReinstalling}
+																				<Loader2 class="mr-2 size-3 animate-spin" />
+																				Reinstalling...
+																			{:else}
+																				<Key class="mr-2 size-3" />
+																				Auto-Generate & Reinstall
+																			{/if}
+																		</Button>
+																		<Button
+																			variant="outline"
+																			size="sm"
+																			onclick={async () => {
+																				isRetrievingPassword = true;
+																				const formData = new FormData();
+																				const response = await fetch(
+																					`/servers/${server.id}?/retrievePassword`,
+																					{
+																						method: 'POST',
+																						body: formData
+																					}
+																				);
+																				const result = await response.json();
+																				if (result.type === 'success' && result.data?.password) {
+																					serverPassword = result.data.password; // Auto-fill the password field!
+																					toastStore.success('Password retrieved and filled');
+																				} else {
+																					const msg =
+																						result.data?.message || 'Failed to retrieve password';
+																					toastStore.error(msg);
+																					checkVpsError(msg);
+																				}
+																				isRetrievingPassword = false;
+																			}}
+																			disabled={isRetrievingPassword}
+																			class="border-warning-border bg-warning-foreground/5 text-warning-foreground hover:bg-warning-foreground/10"
+																		>
+																			{#if isRetrievingPassword}
+																				<Loader2 class="mr-2 size-3 animate-spin" />
+																			{:else}
+																				<RefreshCw class="mr-2 size-3" />
+																			{/if}
+																			Retrieve Password
+																		</Button>
+																	</div>
+																</div>
+															{/if}
 														</div>
 														{#if retrievedPassword}
 															<div class="bg-background rounded border p-3">
@@ -1574,7 +1705,18 @@
 
 									{#if installProgress.length > 0}
 										<div class="bg-muted/20 mb-6 space-y-3 rounded-lg border p-4">
-											<p class="mb-2 border-b pb-2 text-sm font-semibold">Installation Progress</p>
+											<div class="flex items-center justify-between border-b pb-2">
+												<p class="text-sm font-semibold">Installation Progress</p>
+												<Button
+													variant="ghost"
+													size="sm"
+													onclick={() => (showInstallLogs = true)}
+													class="h-6 text-xs"
+												>
+													<TerminalIcon class="mr-1 size-3" />
+													View Logs
+												</Button>
+											</div>
 											{#each installProgress as step}
 												<div class="flex items-center gap-3 text-sm">
 													{#if step.status === 'success'}
@@ -1600,6 +1742,28 @@
 												</div>
 											{/each}
 										</div>
+
+										<Dialog.Root bind:open={showInstallLogs}>
+											<Dialog.Content class="max-w-3xl">
+												<Dialog.Header>
+													<Dialog.Title>Installation Logs</Dialog.Title>
+													<Dialog.Description>
+														Real-time output from the agent installation process.
+													</Dialog.Description>
+												</Dialog.Header>
+												<div
+													class="h-[400px] overflow-y-auto rounded-md bg-black p-4 font-mono text-xs whitespace-pre-wrap text-green-400"
+													bind:this={logScrollContainer2}
+												>
+													{#if installLogs}
+														{installLogs}
+													{:else}
+														<span class="text-muted-foreground opacity-50">Waiting for logs...</span
+														>
+													{/if}
+												</div>
+											</Dialog.Content>
+										</Dialog.Root>
 									{/if}
 
 									<div class="grid grid-cols-1 gap-3">
@@ -2657,6 +2821,74 @@
 			</Dialog.Footer>
 		</Dialog.Content>
 	</Dialog.Root>
+
+	<Sheet.Root bind:open={showVpsUpdateSheet}>
+		<Sheet.Content side="bottom" class="h-[400px]">
+			<Sheet.Header>
+				<Sheet.Title class="flex items-center gap-2">
+					<ShieldAlert class="text-warning-muted size-5" />
+					Update Cloud Provider API Key
+				</Sheet.Title>
+				<Sheet.Description>
+					Your cloud provider reported an authorization error. This usually means the API key is
+					expired or has been deactivated. Please provide a new API key to continue managing this
+					server.
+				</Sheet.Description>
+			</Sheet.Header>
+
+			<div class="mx-auto mt-8 max-w-2xl space-y-6">
+				<div class="space-y-2">
+					<Label for="newVpsApiKey" class="text-sm font-semibold"
+						>New API Key for {server.vpsProviderId ? 'your provider' : 'Cloud Provider'}</Label
+					>
+					<div class="flex gap-3">
+						<Input
+							id="newVpsApiKey"
+							type="password"
+							bind:value={newVpsApiKey}
+							placeholder="Enter your new API key..."
+							class="bg-muted/50 flex-1"
+						/>
+						<Button
+							onclick={handleUpdateVpsKey}
+							disabled={isUpdatingVpsKey || !newVpsApiKey}
+							class="min-w-[140px]"
+						>
+							{#if isUpdatingVpsKey}
+								<Loader2 class="mr-2 size-4 animate-spin" />
+								Verifying...
+							{:else}
+								<CheckCircle2 class="mr-2 size-4" />
+								Test & Update
+							{/if}
+						</Button>
+					</div>
+					<p class="text-muted-foreground text-xs">
+						We will verify the key with the provider before saving it.
+					</p>
+				</div>
+
+				<div class="border-warning-border bg-warning rounded-lg border p-4">
+					<div class="flex items-start gap-3">
+						<AlertCircle class="text-warning-muted mt-0.5 size-4" />
+						<div class="text-warning-foreground text-sm">
+							<p class="font-semibold">Important</p>
+							<p class="opacity-80">
+								Updating this key will affect all servers and domains associated with this provider
+								account in SelfHost.
+							</p>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<Sheet.Footer class="mt-8">
+				<Sheet.Close asChild>
+					<Button variant="ghost">Cancel</Button>
+				</Sheet.Close>
+			</Sheet.Footer>
+		</Sheet.Content>
+	</Sheet.Root>
 {:else}
 	<div class="flex min-h-[400px] items-center justify-center">
 		<div class="text-muted-foreground animate-pulse">Loading server details...</div>
