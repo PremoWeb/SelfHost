@@ -11,7 +11,15 @@ An open-source, full-stack application deployment platform built with SvelteKit,
 
 ---
 
-</div>
+> [!WARNING]
+> **Early Preview Version**: This software is in active development and should be considered an **early alpha**.
+>
+> - Many features are currently broken or incomplete.
+> - The UI is not finalized and is subject to major changes.
+> - **Security Notice**: This software has not yet been audited and should not be considered "hardened" or secure for production use. Active work is being done to harden the stack.
+> - **Production Readiness**: Do not use this for critical infrastructure yet.
+>
+> 🌐 **Website Coming Soon**: We are working on a full marketing site and official documentation at [selfhost.gg](https://selfhost.gg).
 
 ## 🚀 Overview
 
