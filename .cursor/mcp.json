@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "svelte": {
+      "command": "bun",
+      "args": ["x", "-y", "@sveltejs/mcp"]
+    },
+    "shadcn-svelte-mcp": {
+      "command": "bun",
+      "args": [
+        "x",
+        "-y",
+        "mcp-remote",
+        "https://shadcn-svelte.mastra.cloud/api/mcp/shadcn/mcp"
+      ]
+    }
+  }
+}

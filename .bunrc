@@ -1,0 +1,20 @@
+# Bun configuration file
+# This ensures Bun is used for all package management operations
+
+[install]
+# Use exact versions from lockfile
+exact = true
+
+# Auto-install peer dependencies
+peer = true
+
+# Faster installs with hardlinks
+hardlink = true
+
+[install.cache]
+# Enable caching for faster installs
+enabled = true
+
+[run]
+# Use Bun's runtime for scripts
+bun = true

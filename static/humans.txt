@@ -1,0 +1,28 @@
+/* TEAM */
+Project Lead: Nick Maietta
+Contact: nick@maietta.org
+Status: Available for hire
+
+/* THANKS */
+Name: The Open Source Community
+Name: Svelte Maintainers
+Name: Bun Team
+Name: Coolify (Inspiration)
+Name: CapRover (Inspiration)
+Name: Dockge (Inspiration)
+
+/* SITE */
+Standards: HTML5, CSS3, TypeScript, WebSocket
+Components: Svelte 5, TailwindCSS 4, Bits UI, Lucide Icons, Monaco Editor, Xterm.js
+Software: Bun, Vite, Drizzle ORM, SQLite, SSH2, Docker integration
+
+/* FEATURES */
+Description: A powerful modern self-hosting platform and dashboard.
+- Zero-config application deployment
+- Multi-cloud server management
+- Real-time agent-based monitoring
+- Web-based SSH terminal
+- Team management & RBAC
+- Git-based CI/CD pipelines
+- Automatic SSL provisioning
+- Database management

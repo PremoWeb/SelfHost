@@ -1,0 +1,59 @@
+# IDEs and Editors
+.idea/
+.vscode/
+.fleet/
+.workspaces/
+
+# OS files
+.DS_Store
+Thumbs.db
+.ssh/
+
+# Database / Shell history
+*.db
+*.db-shm
+*.db-wal
+sqlite-logs.db
+sqlite-logs.db-shm
+sqlite-logs.db-wal
+.bash_history
+.psql_history
+.lesshst
+psysh_history
+
+# Local Environment
+.env
+.env.*
+!.env.example
+!.env.test
+
+# Build and Output
+.output
+.vercel
+.netlify
+.wrangler
+.svelte-kit/
+build/
+dist/
+
+# Dependencies
+node_modules/
+
+# Docker / Temp Data
+_data/
+_volumes/
+_testing_hosts/
+
+# Git Repositories
+data/git-repos/
+
+# Scripts
+scripts/load-test/*
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Bun
+bun.lockb
+.bun

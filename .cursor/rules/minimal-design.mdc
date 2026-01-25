@@ -1,0 +1,41 @@
+---
+description: Design principles for a minimalist, Shadcn-Svelte based UI. Prefers utility-first over custom aesthetic layers.
+globs: src/**/*.svelte, src/**/*.css
+---
+
+# Minimal Design Strategy (Google Antigravity)
+
+Follow these rules to maintain a clean, high-performance, and maintainable user interface.
+
+## Core Rules
+
+1.  **Stick to Shadcn-Svelte Primitive Defaults**:
+    - Use components from `shadcn-svelte` with their default styling.
+    - DO NOT add custom border-radius styles (e.g., `rounded-3xl` or `rounded-full` on cards).
+    - DO NOT add non-standard shadow utility classes.
+
+2.  **Typography & Casing**:
+    - USE standard sentence/title casing for all headings, labels, and buttons.
+    - AVOID `uppercase` classes for main UI elements.
+    - AVOID `tracking-widest` or high letter-spacing overrides.
+    - Prefer `font-semibold` or `font-bold` over `font-black`.
+
+3.  **Layout & Spacing**:
+    - ENSURE pages utilize full available horizontal width (avoid `max-w-7xl` on main wrappers).
+    - USE standard Shadcn spacing and gaps.
+    - AVOID decorative aesthetic "blobs", gradients, or glassmorphism.
+
+4.  **Light Theme Enforcement**:
+    - Maintain the high-contrast light theme as the primary experience.
+
+## Example (Bad)
+```html
+<h1 class="text-6xl font-black uppercase tracking-[0.4em]">PROJECTS</h1>
+<Button class="rounded-3xl px-12 uppercase tracking-widest">CREATE</Button>
+```
+
+## Example (Good)
+```html
+<h1 class="text-3xl font-bold tracking-tight">Projects</h1>
+<Button>New Project</Button>
+```
