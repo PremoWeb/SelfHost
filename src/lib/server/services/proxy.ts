@@ -50,7 +50,7 @@ services:
 `;
 }
 
-export async function updateProxySettings(serverId: string, teamId: string, settings: ProxyConfig) {
+export async function updateProxySettings(serverId: string, teamId: string | null, settings: ProxyConfig) {
     await db.update(servers)
         .set({
             proxyType: settings.type,

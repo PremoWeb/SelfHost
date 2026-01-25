@@ -155,6 +155,19 @@ export async function updateServer(
 	teamId: string | null | undefined,
 	data: Partial<NewServer>
 ) {
+    if (!teamId) {
+        // God mode or direct ID access
+        const [server] = await db
+            .update(servers)
+            .set({
+                ...data,
+                updatedAt: new Date()
+            })
+            .where(eq(servers.id, serverId))
+            .returning();
+        return server || null;
+    }
+
 	const [server] = await db
 		.update(servers)
 		.set({
@@ -164,12 +177,10 @@ export async function updateServer(
 		.where(
 			and(
 				eq(servers.id, serverId),
-				teamId
-					? or(
-							eq(servers.teamId, teamId),
-							and(eq(servers.ownerType, 'team'), eq(servers.ownerId, teamId))
-						)
-					: undefined
+				or(
+                    eq(servers.teamId, teamId),
+                    and(eq(servers.ownerType, 'team'), eq(servers.ownerId, teamId))
+                )
 			)
 		)
 		.returning();
@@ -221,7 +232,7 @@ export async function validateServerConnection(serverId: string, teamId: string 
 		return { success: false, message: 'No private key associated with this server' };
 	}
 
-	const privateKey = await getPrivateKeyById(server.privateKeyId, teamId || null, false);
+	const privateKey = await getPrivateKeyById(server.privateKeyId, teamId || null, !teamId);
 	if (!privateKey) {
 		return { success: false, message: 'Private key not found or access denied' };
 	}

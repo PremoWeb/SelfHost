@@ -173,7 +173,7 @@ export async function requireAuth(locals: App.Locals): Promise<void> {
 	}
 	
 	// User is not authorized
-	throw error(401, `Unauthorized: User ${userId} is not God, has no team, and is not super admin`);
+	throw error(401, `Unauthorized: Session may have expired or team context is missing. (User: ${userId}, Team: ${teamId || 'none'})`);
 }
 
 /**

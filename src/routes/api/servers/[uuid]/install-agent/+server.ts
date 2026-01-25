@@ -2,9 +2,13 @@ import { json } from '@sveltejs/kit';
 import { installAgent } from '$lib/server/services/agent';
 import type { RequestHandler } from './$types';
 
+import { isGod } from '$lib/server/auth/permissions';
+
 export const POST: RequestHandler = async ({ params, locals, request }) => {
 	const serverId = params.uuid;
-	if (!locals.team || !serverId) {
+    const isGodUser = await isGod(locals.user?.id);
+
+	if ((!locals.team && !isGodUser) || !serverId) {
 		return json({ message: 'Unauthorized' }, { status: 401 });
 	}
 
@@ -32,9 +36,14 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 			};
 
 			try {
-				await installAgent(serverId, locals.team!.id, callbackUrl, (step, message) => {
-					send({ step, message, status: 'in-progress' });
-				});
+				await installAgent(serverId, locals.team?.id || null, callbackUrl, 
+                    (step, message) => {
+					    send({ step, message, status: 'in-progress' });
+				    },
+                    (log) => {
+                        send({ step: 'log', message: log });
+                    }
+                );
 				send({ step: 'complete', message: 'Installation complete!', status: 'success', tunnelUrl: callbackUrl });
 			} catch (err: any) {
 				send({ step: 'error', message: err.message || 'Unknown error', status: 'error' });

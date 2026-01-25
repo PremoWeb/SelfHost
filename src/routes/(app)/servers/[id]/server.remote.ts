@@ -3,6 +3,7 @@ import { getServerById } from '$lib/server/services/servers';
 import { agentManager } from '$lib/server/agent/manager';
 import { updateProxySettings, generateTraefikConfig } from '$lib/server/services/proxy';
 import { Client } from 'ssh2';
+import { isGod } from '$lib/server/auth/permissions';
 
 interface ActionResponse {
 	success: boolean;
@@ -15,8 +16,16 @@ interface ActionResponse {
 
 export const diagnoseServer = command('unchecked', async ({ serverId }: { serverId: string }): Promise<ActionResponse> => {
 	const { locals } = getRequestEvent();
-	if (!locals.team || !serverId) {
-		return { success: false, message: 'Unauthorized' };
+	const userIsGod = locals.user?.id ? await isGod(locals.user.id) : false;
+	
+	if (!locals.user) {
+		return { success: false, message: 'Authentication required: Your session may have expired' };
+	}
+	if (!locals.team && !userIsGod) {
+		return { success: false, message: 'Authorization required: No active team selected' };
+	}
+	if (!serverId) {
+		return { success: false, message: 'Missing server identification' };
 	}
 
 	const { db } = await import('$lib/server/db/client');
@@ -27,7 +36,7 @@ export const diagnoseServer = command('unchecked', async ({ serverId }: { server
 		where: eq(servers.id, serverId)
 	});
 
-	if (!server || server.teamId !== locals.team.id) {
+	if (!server || (!userIsGod && server.teamId !== locals.team?.id)) {
 		return { success: false, message: 'Server not found' };
 	}
 
@@ -103,8 +112,16 @@ export const rebootServer = command(
 	'unchecked',
 	async ({ serverId, type = 'graceful' }: { serverId: string; type?: 'graceful' | 'hard' | 'intelligent' }): Promise<ActionResponse> => {
 		const { locals } = getRequestEvent();
-		if (!locals.team || !serverId) {
-			return { success: false, message: 'Unauthorized' };
+		const userIsGod = locals.user?.id ? await isGod(locals.user.id) : false;
+
+		if (!locals.user) {
+			return { success: false, message: 'Authentication required: Your session may have expired' };
+		}
+		if (!locals.team && !userIsGod) {
+			return { success: false, message: 'Authorization required: No active team selected' };
+		}
+		if (!serverId) {
+			return { success: false, message: 'Missing server identification' };
 		}
 
 		const { db } = await import('$lib/server/db/client');
@@ -115,7 +132,7 @@ export const rebootServer = command(
 			where: eq(servers.id, serverId)
 		});
 
-		if (!server || server.teamId !== locals.team.id) {
+		if (!server || (!userIsGod && server.teamId !== locals.team?.id)) {
 			return { success: false, message: 'Server not found' };
 		}
 
@@ -147,8 +164,16 @@ export const rebootServer = command(
 
 export const restartAgent = command('unchecked', async ({ serverId }: { serverId: string }): Promise<ActionResponse> => {
 	const { locals } = getRequestEvent();
-	if (!locals.team || !serverId) {
-		return { success: false, message: 'Unauthorized' };
+	const userIsGod = locals.user?.id ? await isGod(locals.user.id) : false;
+
+	if (!locals.user) {
+		return { success: false, message: 'Authentication required: Your session may have expired' };
+	}
+	if (!locals.team && !userIsGod) {
+		return { success: false, message: 'Authorization required: No active team selected' };
+	}
+	if (!serverId) {
+		return { success: false, message: 'Missing server identification' };
 	}
 
 	const { db } = await import('$lib/server/db/client');
@@ -159,7 +184,7 @@ export const restartAgent = command('unchecked', async ({ serverId }: { serverId
 		where: eq(servers.id, serverId)
 	});
 
-	if (!server || server.teamId !== locals.team.id) {
+	if (!server || (!userIsGod && server.teamId !== locals.team?.id)) {
 		return { success: false, message: 'Server not found' };
 	}
 
@@ -178,8 +203,16 @@ export const forceUpdateService = command(
 	'unchecked',
 	async ({ serverId, tunnelUrl }: { serverId: string; tunnelUrl: string }): Promise<ActionResponse> => {
 		const { locals } = getRequestEvent();
-		if (!locals.team || !serverId) {
-			return { success: false, message: 'Unauthorized' };
+		const userIsGod = locals.user?.id ? await isGod(locals.user.id) : false;
+
+		if (!locals.user) {
+			return { success: false, message: 'Authentication required: Your session may have expired' };
+		}
+		if (!locals.team && !userIsGod) {
+			return { success: false, message: 'Authorization required: No active team selected' };
+		}
+		if (!serverId) {
+			return { success: false, message: 'Missing server identification' };
 		}
 
 		const { db } = await import('$lib/server/db/client');
@@ -190,7 +223,7 @@ export const forceUpdateService = command(
 			where: eq(servers.id, serverId)
 		});
 
-		if (!server || server.teamId !== locals.team.id) {
+		if (!server || (!userIsGod && server.teamId !== locals.team?.id)) {
 			return { success: false, message: 'Server not found' };
 		}
 
@@ -261,8 +294,16 @@ export const getAppStatus = command(
 	'unchecked',
 	async ({ serverId, appName }: { serverId: string; appName: string }): Promise<ActionResponse> => {
 		const { locals } = getRequestEvent();
-		if (!locals.team || !serverId || !appName) {
-			return { success: false, message: 'Unauthorized or missing parameters' };
+		const userIsGod = locals.user?.id ? await isGod(locals.user.id) : false;
+
+		if (!locals.user) {
+			return { success: false, message: 'Authentication required: Your session may have expired' };
+		}
+		if (!locals.team && !userIsGod) {
+			return { success: false, message: 'Authorization required: No active team selected' };
+		}
+		if (!serverId || !appName) {
+			return { success: false, message: 'Missing parameters' };
 		}
 
 		try {
@@ -302,16 +343,24 @@ export const proxyAction = command(
         email?: string 
     }): Promise<ActionResponse> => {
 		const { locals } = getRequestEvent();
-		if (!locals.team || !serverId) {
-			return { success: false, message: 'Unauthorized' };
+		const userIsGod = locals.user?.id ? await isGod(locals.user.id) : false;
+
+		if (!locals.user) {
+			return { success: false, message: 'Authentication required: Your session may have expired' };
+		}
+		if (!locals.team && !userIsGod) {
+			return { success: false, message: 'Authorization required: No active team selected' };
+		}
+		if (!serverId) {
+			return { success: false, message: 'Missing server identification' };
 		}
 
-		const server = await getServerById(serverId, locals.team.id);
+		const server = await getServerById(serverId, locals.team?.id || null);
 		if (!server) return { success: false, message: 'Server not found' };
 
 		if (action === 'configure' || action === 'start') {
 			const proxyType = type || server.proxyType || 'traefik';
-			await updateProxySettings(server.id, locals.team.id, { type: proxyType, email });
+			await updateProxySettings(server.id, locals.team?.id || null, { type: proxyType, email });
 			
 			// Starting via RPC (non-SSE version for simple actions)
 			if (server.connectionType === 'agent') {
@@ -399,11 +448,19 @@ export const proxyAction = command(
 
 export const checkReadiness = command('unchecked', async ({ serverId }: { serverId: string }): Promise<ActionResponse> => {
 	const { locals } = getRequestEvent();
-	if (!locals.team || !serverId) {
-		return { success: false, message: 'Unauthorized' };
+	const userIsGod = locals.user?.id ? await isGod(locals.user.id) : false;
+
+	if (!locals.user) {
+		return { success: false, message: 'Authentication required: Your session may have expired' };
+	}
+	if (!locals.team && !userIsGod) {
+		return { success: false, message: 'Authorization required: No active team selected' };
+	}
+	if (!serverId) {
+		return { success: false, message: 'Missing server identification' };
 	}
 
-	const server = await getServerById(serverId, locals.team.id);
+	const server = await getServerById(serverId, locals.team?.id || null);
 	if (!server) return { success: false, message: 'Server not found' };
 
 	try {
@@ -421,3 +478,85 @@ export const checkReadiness = command('unchecked', async ({ serverId }: { server
 		return { success: false, message: err.message };
 	}
 });
+export const installPrivateKeyRemote = command('unchecked', async ({ 
+    serverId, 
+    password, 
+    keyId 
+}: { 
+    serverId: string; 
+    password: string; 
+    keyId?: string 
+}): Promise<ActionResponse> => {
+    const { locals } = getRequestEvent();
+    const userIsGod = locals.user?.id ? await isGod(locals.user.id) : false;
+
+    if (!locals.user) {
+        return { success: false, message: 'Authentication required: Your session may have expired' };
+    }
+    if (!locals.team && !userIsGod) {
+        return { success: false, message: 'Authorization required: No active team selected' };
+    }
+    if (!serverId) {
+        return { success: false, message: 'Missing server identification' };
+    }
+
+
+    try {
+        const { installPrivateKeyViaPassword } = await import('$lib/server/services/security');
+        const result: any = await installPrivateKeyViaPassword({
+            serverId,
+            teamId: locals.team?.id,
+            password,
+            keyId,
+            userId: locals.user.id
+        });
+        return { 
+            success: true, 
+            message: 'Deployment key installed successfully',
+            data: { privateKeyId: result.privateKeyId }
+        };
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Failed to install key' };
+    }
+});
+
+export const updateVpsApiKeyRemote = command('unchecked', async ({ 
+    providerId, 
+    apiKey 
+}: { 
+    providerId: string; 
+    apiKey: string;
+}): Promise<ActionResponse> => {
+    const { locals } = getRequestEvent();
+    const userIsGod = locals.user?.id ? await isGod(locals.user.id) : false;
+
+    if (!locals.user) {
+        return { success: false, message: 'Authentication required: Your session may have expired' };
+    }
+    if (!locals.team && !userIsGod) {
+        return { success: false, message: 'Authorization required: No active team selected' };
+    }
+
+    try {
+        const { getVpsProviderById, updateVpsProvider, testVpsProviderKey } = await import('$lib/server/services/vps/providers');
+        const provider = await getVpsProviderById(providerId, locals.team?.id || null);
+        
+        if (!provider) {
+            return { success: false, message: 'Provider not found' };
+        }
+
+        // Test the new key
+        const testResult = await testVpsProviderKey(provider.type, apiKey);
+        if (!testResult.success) {
+            return { success: false, message: `Key verification failed: ${testResult.message}` };
+        }
+
+        // Update the provider
+        await updateVpsProvider(providerId, locals.team?.id || null, { apiKey });
+        
+        return { success: true, message: 'API key updated and verified successfully' };
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Failed to update API key' };
+    }
+});
+

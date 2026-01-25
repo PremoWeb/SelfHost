@@ -26,6 +26,10 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
+	--color-warning: var(--warning);
+	--color-warning-foreground: var(--warning-foreground);
+	--color-warning-border: var(--warning-border);
+	--color-warning-muted: var(--warning-muted);
 }
 
 :root {
@@ -49,6 +53,10 @@
 	--border: #e4e4e7;
 	--input: #e4e4e7;
 	--ring: #18181b;
+	--warning: #fffbeb;
+	--warning-foreground: #78350f;
+	--warning-border: rgba(245, 158, 11, 0.2);
+	--warning-muted: #92400e;
 }
 
 /* Force Light Theme */
@@ -72,6 +80,10 @@
 	--border: #27272a;
 	--input: #27272a;
 	--ring: #d4d4d8;
+	--warning: #1a120b;
+	--warning-foreground: #fffbeb;
+	--warning-border: rgba(245, 158, 11, 0.2);
+	--warning-muted: #fbbf24;
 }
 
 @layer base {

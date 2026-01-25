@@ -2,7 +2,7 @@ import { error, fail } from '@sveltejs/kit';
 import { getServerById } from '$lib/server/services/servers';
 import { getVpsProvidersByTeam, getVpsProviderById } from '$lib/server/services/vps/providers';
 import { VultrService } from '$lib/server/services/vps/vultr';
-import { getPrivateKeysByTeam, createPrivateKey, generateKeyPair } from '$lib/server/services/security';
+import { getPrivateKeysByTeam, createPrivateKey, generateKeyPair, getPrivateKeysByOwner, getPrivateKeyById } from '$lib/server/services/security';
 import { updateServer } from '$lib/server/services/servers';
 import { installAgent } from '$lib/server/services/agent';
 import { agentManager } from '$lib/server/agent/manager';
@@ -17,13 +17,30 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	await requireAuth(locals);
 	
 	// God users can access any server, others need a team
-	if (!locals.team && !(await isGod(locals.user!.id))) {
+    const isGodUser = await isGod(locals.user!.id);
+	if (!locals.team && !isGodUser) {
 		throw error(400, 'Team required to view server');
 	}
 
 	const server = await getServerById(serverId, locals.team?.id || null);
 	const vpsProviders = locals.team ? await getVpsProvidersByTeam(locals.team.id) : [];
-	const privateKeys = locals.team ? await getPrivateKeysByTeam(locals.team.id) : [];
+	
+    let privateKeys: any[] = [];
+    if (server?.teamId) {
+        // Fetch keys for the server's team
+        privateKeys = await getPrivateKeysByTeam(server.teamId, false);
+    } else if (server?.ownerType && server?.ownerId) {
+        // Fetch keys for the server's owner (individual/company)
+        privateKeys = await getPrivateKeysByOwner(server.ownerType, server.ownerId);
+    }
+
+    // Ensure the currently assigned key is always included in the list
+    if (server?.privateKeyId && !privateKeys.find(k => k.id === server.privateKeyId)) {
+        const assignedKey = await getPrivateKeyById(server.privateKeyId, null, true);
+        if (assignedKey) {
+            privateKeys.push(assignedKey);
+        }
+    }
 
 	if (!server) {
 		throw error(404, 'Server not found');
@@ -156,6 +173,9 @@ export const actions: Actions = {
 			
 			return fail(400, { message: `Provider type ${provider.type} not supported for password retrieval` });
 		} catch (err: any) {
+			if (err.response?.status === 401 || err.response?.status === 403) {
+				return fail(401, { message: `Cloud Provider Unauthorized: The API key for ${provider.name} appears to be invalid, expired, or deactivated.` });
+			}
 			return fail(500, { message: err.message || 'Failed to retrieve password' });
 		}
 	},
@@ -227,6 +247,9 @@ export const actions: Actions = {
 			
 			return fail(400, { message: `Provider type ${provider.type} not supported for reinstall` });
 		} catch (err: any) {
+			if (err.response?.status === 401 || err.response?.status === 403) {
+				return fail(401, { message: `Cloud Provider Unauthorized: The API key for ${provider.name} appears to be invalid, expired, or deactivated.` });
+			}
 			return fail(500, { message: err.message || 'Failed to reinstall server' });
 		}
 	}

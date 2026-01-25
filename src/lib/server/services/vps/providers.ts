@@ -195,3 +195,23 @@ export async function deleteVpsProvider(id: string, teamId: string | null | unde
 		.returning();
 	return deleted;
 }
+
+/**
+ * Test a VPS provider API key
+ */
+import { VultrService } from './vultr';
+
+export async function testVpsProviderKey(type: string, apiKey: string) {
+    try {
+        if (type === 'vultr') {
+            const service = new VultrService(apiKey);
+            await service.accountInfo();
+            return { success: true };
+        }
+        // Add other providers here
+        return { success: false, message: `Testing not supported for ${type}` };
+    } catch (err: any) {
+        return { success: false, message: err.message || 'Verification failed' };
+    }
+}
+

@@ -1,6 +1,6 @@
 import { db } from '../db/client';
 import { privateKeys } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and, or } from 'drizzle-orm';
 import type { NewPrivateKey } from '../db/schema';
 import { createPrivateKey as createCryptoKey } from 'node:crypto';
 
@@ -12,65 +12,76 @@ import { execSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import ssh2 from 'ssh2';
+const { Client: SSH2Client, utils: sshutils } = ssh2;
+import { getServerById, updateServer } from './servers';
 
 /**
  * Helper to derive public key from private key
  */
-function derivePublicKey(privateKeyPem: string): string | null {
-    // 1. Try node:crypto first (fastest)
-    try {
-        const key = createCryptoKey(privateKeyPem);
-         return (key.export({
-             format: 'openssh',
-             type: 'pkcs1' 
-         } as any)).toString();
-    } catch (e) {
-    }
 
-    // 2. Fallback to ssh-keygen (most robust on Linux)
+function derivePublicKey(privateKeyPem: string): string | null {
     try {
-        // Create a unique temp file
-        const tempId = randomBytes(16).toString('hex');
-        const tempFilePath = join(tmpdir(), `temp-key-${tempId}`);
-        
-        // Ensure the private key ends with a newline to avoid some aggressive ssh-keygen parsing issues
-        const content = privateKeyPem.trim() + '\n';
-        
-        // Write private key to temp file
-        // Set mode to 600 (owner read/write only) as ssh-keygen often requires strict permissions
-        writeFileSync(tempFilePath, content, { mode: 0o600 });
-        
-        try {
-            // Run ssh-keygen -y -f <file>
-            // -y: Read private key file and print public key
-            const publicKey = execSync(`ssh-keygen -y -f "${tempFilePath}"`, { 
-                encoding: 'utf-8',
-                stdio: ['pipe', 'pipe', 'ignore'] // Suppress stderr
-            });
-            
-            return publicKey.trim();
-        } finally {
-            // Always clean up temp file
-            try {
-                unlinkSync(tempFilePath);
-            } catch (cleanupErr) {
-            }
+        const parsed = sshutils.parseKey(privateKeyPem);
+        if (parsed instanceof Error) {
+            console.error('Failed to parse SSH key:', parsed.message);
+            return null;
         }
-    } catch (fallbackErr) {
+
+        if (typeof parsed.getPublicSSH !== 'function') {
+            // For some key types, ssh2 might not have getPublicSSH on the object directly
+            // or it might be a different structure depending on the version/type.
+            // But for RSA/ED25519/ECDSA it usually exists.
+            return null;
+        }
+
+        const publicSSH = parsed.getPublicSSH();
+        return `${parsed.type} ${publicSSH.toString('base64')}`;
+    } catch (e) {
+        console.error('Error deriving public key:', e);
         return null;
     }
 }
 
 /**
- * Get all private keys for a team
+ * Get all private keys for a team or user
  */
-export async function getPrivateKeysByTeam(teamId: string | null | undefined) {
+export async function getPrivateKeysByTeam(teamId: string | null | undefined, isGod: boolean = false) {
+    if (isGod) {
+        return db
+            .select()
+            .from(privateKeys)
+            .orderBy(privateKeys.createdAt);
+    }
+
     if (!teamId) return [];
+
 	return db
 		.select()
 		.from(privateKeys)
-		.where(eq(privateKeys.teamId, teamId))
+		.where(
+            or(
+                eq(privateKeys.teamId, teamId),
+                and(eq(privateKeys.ownerType, 'team'), eq(privateKeys.ownerId, teamId))
+            )
+        )
 		.orderBy(privateKeys.createdAt);
+}
+
+/**
+ * Get private keys by owner (polymorphic)
+ */
+export async function getPrivateKeysByOwner(ownerType: string, ownerId: string) {
+    return db
+        .select()
+        .from(privateKeys)
+        .where(
+            and(
+                eq(privateKeys.ownerType, ownerType),
+                eq(privateKeys.ownerId, ownerId)
+            )
+        )
+        .orderBy(privateKeys.createdAt);
 }
 
 /**
@@ -186,20 +197,177 @@ export async function deletePrivateKey(keyId: string, teamId: string | null, isG
 import { generateKeyPairSync } from 'node:crypto';
 
 export function generateKeyPair() {
-	const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+	const { privateKey, publicKey: publicKeyPem } = generateKeyPairSync('rsa' as any, {
 		modulusLength: 4096,
 		publicKeyEncoding: {
-			type: 'pkcs1',
+            type: 'pkcs1',
 			format: 'pem'
 		},
 		privateKeyEncoding: {
 			type: 'pkcs1',
 			format: 'pem'
 		}
-	});
+	} as any);
+
+    const publicKey = derivePublicKey(privateKey.toString());
 
 	return {
-		privateKey,
-		publicKey
+		privateKey: privateKey.toString(),
+		publicKey: publicKey || publicKeyPem.toString()
 	};
+}
+
+
+/**
+ * Install a private key on a remote server using a password
+ */
+export async function installPrivateKeyViaPassword({
+    serverId,
+    teamId,
+    password,
+    keyId,
+    userId // Added userId for God mode ownership
+}: {
+    serverId: string;
+    teamId?: string | null;
+    password: string;
+    keyId?: string;
+    userId?: string;
+}) {
+    const server = await getServerById(serverId, teamId);
+    if (!server) throw new Error('Server not found');
+
+    let privateKeyRecord;
+    if (keyId) {
+        privateKeyRecord = await getPrivateKeyById(keyId, teamId, true); // Use isGod = true to ensure we find it
+        if (!privateKeyRecord) throw new Error('Private key not found');
+    } else {
+        // Generate a new key if none provided
+        const { privateKey, publicKey } = generateKeyPair();
+        
+        // Determine ownership
+        const ownerType = teamId ? 'team' : 'individual';
+        const ownerId = teamId || userId;
+        
+        if (!ownerId && !teamId) {
+            throw new Error('Could not determine ownership for new key (missing team and user ID)');
+        }
+
+        privateKeyRecord = await createPrivateKey({
+            name: `Auto-generated for ${server.name}`,
+            privateKey,
+            teamId: teamId || null,
+            ownerType,
+            ownerId
+        });
+        // We'll need the public key for installation
+        (privateKeyRecord as any).publicKey = publicKey;
+    }
+
+    // Ensure we have the OpenSSH formatted public key
+    const publicKey = ((privateKeyRecord as any).publicKey || derivePublicKey(privateKeyRecord.privateKey)) as string;
+    if (!publicKey) throw new Error('Could not derive public key');
+
+    return new Promise((resolve, reject) => {
+        const conn = new SSH2Client();
+        let isDone = false;
+
+        const cleanup = (error?: Error) => {
+            if (isDone) return;
+            isDone = true;
+            conn.end();
+            if (error) reject(error);
+        };
+
+        conn.on('ready', () => {
+            // Use a safer way to append to authorized_keys that handles newlines
+            const command = `mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && grep -qF "${publicKey}" ~/.ssh/authorized_keys || echo "${publicKey}" >> ~/.ssh/authorized_keys`;
+            
+            conn.exec(command, (err, stream) => {
+                if (err) {
+                    return cleanup(err);
+                }
+                
+                stream.on('close', async (code: number) => {
+                    if (code === 0) {
+                        try {
+                            const updated = await updateServer(serverId, teamId, { privateKeyId: privateKeyRecord.id });
+                            
+                            isDone = true;
+                            conn.end();
+                            resolve({ 
+                                success: true, 
+                                message: 'Key installed successfully',
+                                privateKeyId: privateKeyRecord.id,
+                                keyId: privateKeyRecord.id // alias for backward compat if needed
+                            });
+                        } catch (updateErr) {
+                            cleanup(updateErr instanceof Error ? updateErr : new Error(String(updateErr)));
+                        }
+                    } else {
+                        cleanup(new Error(`Failed to install key. Exit code: ${code}`));
+                    }
+                });
+            });
+        }).on('error', (err: Error) => {
+            cleanup(new Error(`Connection failed: ${err.message}`));
+        }).on('keyboard-interactive', (name, instructions, lang, prompts, finish) => {
+            // Auto-respond with password for any prompt
+            if (prompts.length > 0) {
+                 finish([password]);
+            } else {
+                 finish([]);
+            }
+        }).connect((() => {
+            const connectOptions: any = {
+                username: server.user || 'root',
+                password: password,
+                readyTimeout: 10000,
+                keepaliveInterval: 1000,
+                tryKeyboard: true
+            };
+
+            if (server.cloudflareTunnelHostname) {
+                connectOptions.sock = (async () => {
+                    const { CloudflareAccessService } = await import('./cloudflare-access');
+                    const { Duplex } = await import('node:stream');
+
+                    const proxy = await CloudflareAccessService.getSshProxyStream(
+                        server.cloudflareTunnelHostname,
+                        server.cloudflareAccessTokenId
+                    );
+                    
+                    const duplex = new Duplex({
+                        read() {},
+                        write(chunk, encoding, callback) {
+                            proxy.stdin.write(chunk, encoding, callback);
+                        }
+                    });
+
+                    proxy.stdout.on('data', (chunk: Buffer) => duplex.push(chunk));
+                    proxy.stdout.on('end', () => duplex.push(null));
+                    proxy.proc.on('error', (err: Error) => duplex.emit('error', err));
+                    proxy.proc.on('exit', (code: number) => {
+                        if (code !== 0) duplex.emit('error', new Error(`cloudflared exited with code ${code}`));
+                    });
+
+                    conn.on('end', () => proxy.proc.kill());
+                    conn.on('error', () => proxy.proc.kill());
+
+                    return duplex;
+                })();
+            } else {
+                connectOptions.host = server.ip;
+                connectOptions.port = server.port || 22;
+            }
+            return connectOptions;
+        })());
+
+        // Global timeout as a safety net
+        setTimeout(() => {
+            if (!isDone) {
+                cleanup(new Error('Installation timed out after 20 seconds'));
+            }
+        }, 20000);
+    });
 }

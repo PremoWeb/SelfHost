@@ -35,9 +35,60 @@ export async function executeCommand(
 		throw new Error('Private key not found or access denied');
 	}
 
+	const conn = new Client();
+	
+	let connectOptions: any = {
+		username: server.user,
+		privateKey: privateKey.privateKey,
+		readyTimeout: 10000,
+		keepaliveInterval: 1000,
+	};
+
+	if (server.cloudflareTunnelHostname) {
+		const proxy = await CloudflareAccessService.getSshProxyStream(
+			server.cloudflareTunnelHostname,
+			server.cloudflareAccessTokenId
+		);
+
+		// Create a Duplex stream from the process
+		const duplex = new Duplex({
+			read(size) {
+				// Data is pushed from stdout
+			},
+			write(chunk, encoding, callback) {
+				proxy.stdin.write(chunk, encoding, callback);
+			}
+		});
+
+		proxy.stdout.on('data', (chunk) => {
+			duplex.push(chunk);
+		});
+
+		proxy.stdout.on('end', () => {
+			duplex.push(null);
+		});
+
+		proxy.proc.on('error', (err) => {
+			duplex.emit('error', err);
+		});
+
+		proxy.proc.on('exit', (code) => {
+			if (code !== 0) {
+				duplex.emit('error', new Error(`cloudflared exited with code ${code}`));
+			}
+		});
+
+		// Handle cleanup
+		conn.on('end', () => proxy.proc.kill());
+		conn.on('error', () => proxy.proc.kill());
+
+		connectOptions.sock = duplex;
+	} else {
+		connectOptions.host = server.ip;
+		connectOptions.port = server.port;
+	}
+
 	return new Promise<CommandResult>((resolve, reject) => {
-		const conn = new Client();
-		
 		conn.on('ready', () => {
 			conn.exec(command, (err, stream) => {
 				if (err) {
@@ -65,58 +116,6 @@ export async function executeCommand(
 			});
 		}).on('error', (err) => {
 			reject(new Error(`Connection failed: ${err.message}`));
-		}).connect({
-			username: server.user,
-			privateKey: privateKey.privateKey,
-			readyTimeout: 10000,
-			keepaliveInterval: 1000,
-			...(server.cloudflareTunnelHostname
-				? {
-						sock: await (async () => {
-							const proxy = await CloudflareAccessService.getSshProxyStream(
-								server.cloudflareTunnelHostname,
-								server.cloudflareAccessTokenId
-							);
-
-							// Create a Duplex stream from the process
-							const duplex = new Duplex({
-								read(size) {
-									// Data is pushed from stdout
-								},
-								write(chunk, encoding, callback) {
-									proxy.stdin.write(chunk, encoding, callback);
-								}
-							});
-
-							proxy.stdout.on('data', (chunk) => {
-								duplex.push(chunk);
-							});
-
-							proxy.stdout.on('end', () => {
-								duplex.push(null);
-							});
-
-							proxy.proc.on('error', (err) => {
-								duplex.emit('error', err);
-							});
-
-							proxy.proc.on('exit', (code) => {
-								if (code !== 0) {
-									duplex.emit('error', new Error(`cloudflared exited with code ${code}`));
-								}
-							});
-
-							// Handle cleanup
-							conn.on('end', () => proxy.proc.kill());
-							conn.on('error', () => proxy.proc.kill());
-
-							return duplex;
-						})()
-					}
-				: {
-						host: server.ip,
-						port: server.port
-					})
-		});
+		}).connect(connectOptions);
 	});
 }
