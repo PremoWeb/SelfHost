@@ -42,7 +42,7 @@ SelfHost.gg features a high-performance **Full-Stack SvelteKit** architecture de
 - **Advanced Load Balancing**: Automatic load balancing configuration for applications.
 - **Blue/Green Deployments**: Native support for zero-downtime updates.
 
-## �️ Tech Stack
+## 🛠️ Tech Stack
 
 - **Framework**: SvelteKit 2.x (Svelte 5 Runes)
 - **Runtime**: Bun 1.1.x
@@ -53,7 +53,7 @@ SelfHost.gg features a high-performance **Full-Stack SvelteKit** architecture de
 - **Terminal**: XTerm.js
 - **Authentication**: Better Auth
 
-## � Getting Started
+## 🏁 Getting Started
 
 ### Prerequisites
 
@@ -117,7 +117,20 @@ The application will be available at [http://localhost:5173](http://localhost:51
 - `bun run db:generate` - Generate Drizzle migrations
 - `bun run db:push` - Push schema changes to database
 
-## � License
+## 👤 Project Lead
+
+SelfHost.gg is led by **Nick Maietta**. You can follow the project's progress and reach out directly:
+
+- **X (Twitter)**: [@maietta](https://x.com/maietta)
+- **Email**: [nick@maietta.org](mailto:nick@maietta.org)
+
+## 💖 Sponsorships & Getting Involved
+
+We are currently in the early stages of development and will be looking for **sponsorships** soon. This is a great time to get in early and help shape the future of self-hosting. Whether you're interested in sponsoring the project, contributing code, or providing feedback, we'd love to hear from you.
+
+Help us make SelfHost.gg the gold standard for open-source application deployment!
+
+## 📜 License
 
 This project is licensed under the O'Sassy License. See the [LICENSE](LICENSE) file for details.
 
