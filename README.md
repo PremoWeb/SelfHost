@@ -6,7 +6,7 @@ An open-source, full-stack application deployment platform built with SvelteKit,
 
 [![SvelteKit](https://img.shields.io/badge/Framework-SvelteKit%202.x-ff3e00?logo=svelte&logoColor=white)](https://kit.svelte.dev/)
 [![Drizzle ORM](https://img.shields.io/badge/ORM-Drizzle-c5f74f?logo=drizzle)](https://orm.drizzle.team/)
-[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2015-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![LibSQL](https://img.shields.io/badge/Database-SQLite%2FLibSQL-003554?logo=sqlite&logoColor=white)](https://turso.tech/libsql)
 [![License](https://img.shields.io/badge/License-O'Sassy-blue)](LICENSE)
 
 ---
@@ -19,7 +19,7 @@ SelfHost.gg is a modern alternative to platforms like Heroku, Netlify, and Verce
 
 > **Why Agent Instead of SSH?** The SelfHost Agent uses outbound WebSocket connections, eliminating the need for inbound SSH ports. It provides real-time monitoring, automatic reconnection, and works behind firewalls. [Learn more →](/docs/agent)
 
-Originally a Laravel/Livewire monolith, the platform has been migrated to a high-performance **Full-Stack SvelteKit** architecture for a superior developer experience and real-time responsiveness.
+SelfHost.gg features a high-performance **Full-Stack SvelteKit** architecture designed for a superior developer experience and real-time responsiveness.
 
 ## ✨ Key Features
 
@@ -38,7 +38,7 @@ Originally a Laravel/Livewire monolith, the platform has been migrated to a high
 
 - **Framework**: SvelteKit 2.x (Svelte 5 Runes)
 - **Runtime**: Bun 1.1.x
-- **Database**: PostgreSQL 15 + Drizzle ORM
+- **Database**: SQLite/LibSQL + Drizzle ORM
 - **Styling**: Tailwind CSS 4.x + Shadcn/Svelte
 - **Icons**: Lucide-svelte
 - **Real-time**: WebSockets & Server-Sent Events (SSE)
