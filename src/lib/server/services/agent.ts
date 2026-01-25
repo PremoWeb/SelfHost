@@ -10,16 +10,24 @@ export type InstallStep = 'connecting' | 'detecting' | 'uploading' | 'installing
 
 export async function installAgent(
 	serverId: string, 
-	teamId: string, 
+	teamId: string | null, 
 	callbackUrlOverride?: string,
-	onProgress?: (step: InstallStep, message: string) => void
+	onProgress?: (step: InstallStep, message: string) => void,
+    onLog?: (message: string) => void
 ) {
 	onProgress?.('connecting', 'Connecting to remote server via SSH...');
+    onLog?.('[System] Starting installation...\n');
+	
+    // ... (rest of server/key fetching)
+
+    // ... inside the Promise ...
+
+
 	const server = await getServerById(serverId, teamId);
 	if (!server) throw new Error('Server not found');
 
 	if (!server.privateKeyId) throw new Error('No private key for this server');
-	const privateKey = await getPrivateKeyById(server.privateKeyId, teamId || null, false);
+	const privateKey = await getPrivateKeyById(server.privateKeyId, teamId || null, !teamId);
 	if (!privateKey) throw new Error('Private key not found');
 
 	// 1. Ensure agentKey exists
@@ -159,10 +167,22 @@ export async function installAgent(
 
 										// Helper to execute commands sequentially
 										const execCommand = (cmd: string): Promise<string> => {
+											console.log(`[SSH Command] ${cmd}`);
 											return new Promise((resolveExec, rejectExec) => {
 												conn.exec(cmd, (err, stream) => {
 													if (err) return rejectExec(err);
 													let output = '';
+													stream.on('data', (d: Buffer) => {
+														const chunk = d.toString();
+														process.stdout.write(chunk.split('\n').map(l => l ? `[SSH stdout] ${l}\n` : '').join(''));
+														output += chunk;
+													});
+													stream.stderr.on('data', (d: Buffer) => {
+														const chunk = d.toString();
+														process.stderr.write(chunk.split('\n').map(l => l ? `[SSH stderr] ${l}\n` : '').join(''));
+														// stderr is also output for some tools
+														output += chunk;
+													});
 													stream.on('close', (code: any) => {
 														// Treat null as 0 (success) or handle undefined exit codes
 														if (code !== 0 && code !== null) rejectExec(new Error(`Command failed with code ${code}: ${cmd}\nOutput: ${output}`));
