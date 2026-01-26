@@ -2,7 +2,8 @@ import { db } from '../db/client';
 import { privateKeys, cloudflareAccessTokens } from '../db/schema';
 import { eq, and, or } from 'drizzle-orm';
 import type { NewPrivateKey } from '../db/schema';
-import { createPrivateKey as createCryptoKey } from 'node:crypto';
+// createPrivateKey and randomBytes were imported from node:crypto but seemingly unused in original code
+// import { createPrivateKey as createCryptoKey } from 'node:crypto';
 
 /**
  * Get all Cloudflare Access Tokens for a team
@@ -52,7 +53,7 @@ import { writeFileSync, unlinkSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+// import { randomBytes } from 'node:crypto';
 import ssh2 from 'ssh2';
 const { Client, utils: sshutils } = ssh2;
 import { getServerById, updateServer } from './servers';

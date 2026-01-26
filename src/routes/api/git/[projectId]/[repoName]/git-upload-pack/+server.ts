@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { getRepositoryByProjectId } from '$lib/server/services/git';
 import { getRepositoryPath } from '$lib/server/services/git';
 import { exec } from 'child_process';
-import { Readable } from 'stream';
+// import { Readable } from 'stream';
 
 /**
  * Git Smart HTTP Protocol - git-upload-pack endpoint (pull/clone)
