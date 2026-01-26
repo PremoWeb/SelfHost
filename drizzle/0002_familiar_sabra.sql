@@ -102,7 +102,7 @@ CREATE TABLE `__new_api_tokens` (
 	FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_api_tokens`("id", "name", "description", "token", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "description", "token", "team_id", "owner_type", "owner_id", "created_at", "updated_at" FROM `api_tokens`;--> statement-breakpoint
+INSERT INTO `__new_api_tokens`("id", "name", "description", "token", "team_id", "owner_type", "owner_id", "last_used_at", "created_at", "updated_at") SELECT "id", "name", "description", "token", "team_id", NULL, NULL, "last_used_at", "created_at", "updated_at" FROM `api_tokens`;--> statement-breakpoint
 DROP TABLE `api_tokens`;--> statement-breakpoint
 ALTER TABLE `__new_api_tokens` RENAME TO `api_tokens`;--> statement-breakpoint
 PRAGMA foreign_keys=ON;--> statement-breakpoint
@@ -121,7 +121,7 @@ CREATE TABLE `__new_clients` (
 	FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
-INSERT INTO `__new_clients`("id", "name", "email", "phone", "company", "team_id", "company_id", "created_at", "updated_at") SELECT "id", "name", "email", "phone", "company", "team_id", "company_id", "created_at", "updated_at" FROM `clients`;--> statement-breakpoint
+INSERT INTO `__new_clients`("id", "name", "email", "phone", "company", "team_id", "company_id", "created_at", "updated_at") SELECT "id", "name", "email", "phone", "company", "team_id", NULL, "created_at", "updated_at" FROM `clients`;--> statement-breakpoint
 DROP TABLE `clients`;--> statement-breakpoint
 ALTER TABLE `__new_clients` RENAME TO `clients`;--> statement-breakpoint
 CREATE TABLE `__new_destinations` (
@@ -140,7 +140,7 @@ CREATE TABLE `__new_destinations` (
 	FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_destinations`("id", "name", "description", "type", "network", "server_id", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "description", "type", "network", "server_id", "team_id", "owner_type", "owner_id", "created_at", "updated_at" FROM `destinations`;--> statement-breakpoint
+INSERT INTO `__new_destinations`("id", "name", "description", "type", "network", "server_id", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "description", "type", "network", "server_id", "team_id", NULL, NULL, "created_at", "updated_at" FROM `destinations`;--> statement-breakpoint
 DROP TABLE `destinations`;--> statement-breakpoint
 ALTER TABLE `__new_destinations` RENAME TO `destinations`;--> statement-breakpoint
 CREATE TABLE `__new_domains` (
@@ -157,7 +157,7 @@ CREATE TABLE `__new_domains` (
 	FOREIGN KEY (`nameserver_profile_id`) REFERENCES `nameserver_profiles`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
-INSERT INTO `__new_domains`("id", "name", "provider", "team_id", "owner_type", "owner_id", "nameserver_profile_id", "created_at", "updated_at") SELECT "id", "name", "provider", "team_id", "owner_type", "owner_id", "nameserver_profile_id", "created_at", "updated_at" FROM `domains`;--> statement-breakpoint
+INSERT INTO `__new_domains`("id", "name", "provider", "team_id", "owner_type", "owner_id", "nameserver_profile_id", "created_at", "updated_at") SELECT "id", "name", "provider", "team_id", NULL, NULL, "nameserver_profile_id", "created_at", "updated_at" FROM `domains`;--> statement-breakpoint
 DROP TABLE `domains`;--> statement-breakpoint
 ALTER TABLE `__new_domains` RENAME TO `domains`;--> statement-breakpoint
 CREATE TABLE `__new_private_keys` (
@@ -173,7 +173,7 @@ CREATE TABLE `__new_private_keys` (
 	FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_private_keys`("id", "name", "description", "private_key", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "description", "private_key", "team_id", "owner_type", "owner_id", "created_at", "updated_at" FROM `private_keys`;--> statement-breakpoint
+INSERT INTO `__new_private_keys`("id", "name", "description", "private_key", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "description", "private_key", "team_id", NULL, NULL, "created_at", "updated_at" FROM `private_keys`;--> statement-breakpoint
 DROP TABLE `private_keys`;--> statement-breakpoint
 ALTER TABLE `__new_private_keys` RENAME TO `private_keys`;--> statement-breakpoint
 CREATE TABLE `__new_projects` (
@@ -194,7 +194,7 @@ CREATE TABLE `__new_projects` (
 	FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
-INSERT INTO `__new_projects`("id", "name", "description", "team_id", "client_id", "category_id", "billing_profile_id", "company_id", "created_at", "updated_at") SELECT "id", "name", "description", "team_id", "client_id", "category_id", "billing_profile_id", "company_id", "created_at", "updated_at" FROM `projects`;--> statement-breakpoint
+INSERT INTO `__new_projects`("id", "name", "description", "team_id", "client_id", "category_id", "billing_profile_id", "company_id", "created_at", "updated_at") SELECT "id", "name", "description", "team_id", "client_id", NULL, NULL, NULL, "created_at", "updated_at" FROM `projects`;--> statement-breakpoint
 DROP TABLE `projects`;--> statement-breakpoint
 ALTER TABLE `__new_projects` RENAME TO `projects`;--> statement-breakpoint
 CREATE TABLE `__new_s3_storages` (
@@ -214,7 +214,7 @@ CREATE TABLE `__new_s3_storages` (
 	FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_s3_storages`("id", "name", "description", "endpoint", "region", "bucket", "access_key", "secret_key", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "description", "endpoint", "region", "bucket", "access_key", "secret_key", "team_id", "owner_type", "owner_id", "created_at", "updated_at" FROM `s3_storages`;--> statement-breakpoint
+INSERT INTO `__new_s3_storages`("id", "name", "description", "endpoint", "region", "bucket", "access_key", "secret_key", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "description", "endpoint", "region", "bucket", "access_key", "secret_key", "team_id", NULL, NULL, "created_at", "updated_at" FROM `s3_storages`;--> statement-breakpoint
 DROP TABLE `s3_storages`;--> statement-breakpoint
 ALTER TABLE `__new_s3_storages` RENAME TO `s3_storages`;--> statement-breakpoint
 CREATE TABLE `__new_servers` (
@@ -251,7 +251,7 @@ CREATE TABLE `__new_servers` (
 	FOREIGN KEY (`vps_provider_id`) REFERENCES `vps_providers`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
-INSERT INTO `__new_servers`("id", "name", "description", "ip", "ipv6", "port", "user", "status", "tags", "team_id", "owner_type", "owner_id", "private_key_id", "connection_type", "agent_key", "agent_checksum", "agent_version", "agent_installed_at", "vps_provider_id", "health_cpu", "health_memory", "health_disk", "health_updated_at", "proxy_type", "proxy_status", "proxy_last_applied_at", "created_at", "updated_at") SELECT "id", "name", "description", "ip", "ipv6", "port", "user", "status", "tags", "team_id", "owner_type", "owner_id", "private_key_id", "connection_type", "agent_key", "agent_checksum", "agent_version", "agent_installed_at", "vps_provider_id", "health_cpu", "health_memory", "health_disk", "health_updated_at", "proxy_type", "proxy_status", "proxy_last_applied_at", "created_at", "updated_at" FROM `servers`;--> statement-breakpoint
+INSERT INTO `__new_servers`("id", "name", "description", "ip", "ipv6", "port", "user", "status", "tags", "team_id", "owner_type", "owner_id", "private_key_id", "connection_type", "agent_key", "agent_checksum", "agent_version", "agent_installed_at", "vps_provider_id", "health_cpu", "health_memory", "health_disk", "health_updated_at", "proxy_type", "proxy_status", "proxy_last_applied_at", "created_at", "updated_at") SELECT "id", "name", "description", "ip", "ipv6", "port", "user", "status", "tags", "team_id", NULL, NULL, "private_key_id", "connection_type", "agent_key", "agent_checksum", "agent_version", "agent_installed_at", "vps_provider_id", "health_cpu", "health_memory", "health_disk", "health_updated_at", "proxy_type", "proxy_status", "proxy_last_applied_at", "created_at", "updated_at" FROM `servers`;--> statement-breakpoint
 DROP TABLE `servers`;--> statement-breakpoint
 ALTER TABLE `__new_servers` RENAME TO `servers`;--> statement-breakpoint
 CREATE TABLE `__new_shared_variables` (
@@ -267,7 +267,7 @@ CREATE TABLE `__new_shared_variables` (
 	FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_shared_variables`("id", "key", "value", "is_public", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "key", "value", "is_public", "team_id", "owner_type", "owner_id", "created_at", "updated_at" FROM `shared_variables`;--> statement-breakpoint
+INSERT INTO `__new_shared_variables`("id", "key", "value", "is_public", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "key", "value", "is_public", "team_id", NULL, NULL, "created_at", "updated_at" FROM `shared_variables`;--> statement-breakpoint
 DROP TABLE `shared_variables`;--> statement-breakpoint
 ALTER TABLE `__new_shared_variables` RENAME TO `shared_variables`;--> statement-breakpoint
 CREATE TABLE `__new_sources` (
@@ -293,7 +293,7 @@ CREATE TABLE `__new_sources` (
 	FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_sources`("id", "name", "description", "type", "api_url", "html_url", "token", "is_app", "app_id", "installation_id", "client_id", "client_secret", "private_key", "webhook_secret", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "description", "type", "api_url", "html_url", "token", "is_app", "app_id", "installation_id", "client_id", "client_secret", "private_key", "webhook_secret", "team_id", "owner_type", "owner_id", "created_at", "updated_at" FROM `sources`;--> statement-breakpoint
+INSERT INTO `__new_sources`("id", "name", "description", "type", "api_url", "html_url", "token", "is_app", "app_id", "installation_id", "client_id", "client_secret", "private_key", "webhook_secret", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "description", "type", "api_url", "html_url", "token", "is_app", "app_id", "installation_id", "client_id", "client_secret", "private_key", "webhook_secret", "team_id", NULL, NULL, "created_at", "updated_at" FROM `sources`;--> statement-breakpoint
 DROP TABLE `sources`;--> statement-breakpoint
 ALTER TABLE `__new_sources` RENAME TO `sources`;--> statement-breakpoint
 CREATE TABLE `__new_vps_providers` (
@@ -309,7 +309,7 @@ CREATE TABLE `__new_vps_providers` (
 	FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_vps_providers`("id", "name", "type", "api_key", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "type", "api_key", "team_id", "owner_type", "owner_id", "created_at", "updated_at" FROM `vps_providers`;--> statement-breakpoint
+INSERT INTO `__new_vps_providers`("id", "name", "type", "api_key", "team_id", "owner_type", "owner_id", "created_at", "updated_at") SELECT "id", "name", "type", "api_key", "team_id", NULL, NULL, "created_at", "updated_at" FROM `vps_providers`;--> statement-breakpoint
 DROP TABLE `vps_providers`;--> statement-breakpoint
 ALTER TABLE `__new_vps_providers` RENAME TO `vps_providers`;--> statement-breakpoint
 ALTER TABLE `session` ADD `impersonated_by` text REFERENCES users(id);--> statement-breakpoint
