@@ -51,7 +51,7 @@ COPY --link healthcheck.ts ./
 # Create data directory for SQLite databases and Git repos
 RUN mkdir -p /data /data/git-repos && \
     touch /data/sqlite.db && \
-    chown -R bun:bun /data
+    chown -R bun:bun /data /app
 
 EXPOSE 3000/tcp
 
