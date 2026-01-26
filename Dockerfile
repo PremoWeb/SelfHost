@@ -46,6 +46,8 @@ RUN bun install --ci --production
 COPY --from=builder /app/selfhost-server ./selfhost-server
 # Copy the client assets (static files, JS, CSS)
 COPY --from=builder /app/build/client ./client
+# Copy migrations for automatic DB initialization
+COPY --from=builder /app/drizzle ./drizzle
 COPY --link healthcheck.ts ./
 
 # Create data directory for SQLite databases and Git repos
