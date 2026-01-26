@@ -6,12 +6,17 @@ import { db } from '$lib/server/db/client';
 import { teams, sessions } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { initializeLoggingDatabase } from '$lib/server/db/init-logging';
+import { initializeDatabase } from '$lib/server/db/init';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	// Detect curl requests and serve installer script
 	const userAgent = event.request.headers.get('user-agent') || '';
 	const isCurl = userAgent.toLowerCase().includes('curl');
-	
+
+	// Ensure database is initialized before any request processing
+	// This is critical when server starts and immediately receives healthchecks
+	await initializeDatabase();
+
 	// If it's a curl request to root, serve the installer
 	if (isCurl && event.url.pathname === '/') {
 		const { redirect } = await import('@sveltejs/kit');
@@ -296,7 +301,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 import { dev, building } from '$app/environment';
 import { startTunnel, stopTunnel } from '$lib/server/services/tunnel';
-import { initializeDatabase } from '$lib/server/db/init';
+// import { initializeDatabase } from '$lib/server/db/init'; // Moved to top
 import type { ServerInit } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 

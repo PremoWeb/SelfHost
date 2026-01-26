@@ -31,23 +31,30 @@ export async function initializeDatabase(): Promise<void> {
 	// Start initialization
 	initializationPromise = (async () => {
 		try {
+			console.log('🔄 Database initialization started...');
 			// Quick connectivity check
 			await client.execute('SELECT 1');
+			console.log('✅ Database connectivity verified.');
 
 			// Check if migrations table exists
 			const migrationsTableExists = await checkMigrationsTable();
+			console.log(`📊 Migrations table exists: ${migrationsTableExists}`);
 
 			if (!migrationsTableExists) {
+				console.log('🔨 Creating migrations table...');
 				await createMigrationsTable();
 			}
 
 			// Get applied migrations (fast query)
 			const appliedMigrations = await getAppliedMigrations();
+			console.log(`📂 Found ${appliedMigrations.size} applied migrations.`);
 
 			// Get all migration files (cached after first read)
 			const migrationFiles = await getMigrationFiles();
+			console.log(`📁 Found ${migrationFiles.length} migration files in folder.`);
 
 			if (migrationFiles.length === 0) {
+				console.log('ℹ️ No migration files found, skipping.');
 				isInitialized = true;
 				return;
 			}
@@ -56,6 +63,7 @@ export async function initializeDatabase(): Promise<void> {
 			const pendingMigrations = migrationFiles.filter(
 				(migration) => !appliedMigrations.has(migration.name)
 			);
+			console.log(`🚀 ${pendingMigrations.length} pending migrations to apply.`);
 
 			if (pendingMigrations.length === 0) {
 				isInitialized = true;
@@ -64,11 +72,14 @@ export async function initializeDatabase(): Promise<void> {
 
 			// Apply pending migrations
 			for (const migration of pendingMigrations) {
+				console.log(`📝 Applying migration: ${migration.name}`);
 				await applyMigration(migration);
 			}
 
+			console.log('✨ Database initialization completed successfully.');
 			isInitialized = true;
 		} catch (error) {
+			console.error('❌ Database initialization failed:', error);
 			// Don't re-throw - allow server to continue
 			// The error is logged and can be handled by the application
 		} finally {
@@ -137,6 +148,7 @@ async function getMigrationFiles(): Promise<Array<{ name: string; path: string; 
 
 	try {
 		const migrationsDir = join(process.cwd(), 'drizzle');
+		console.log(`📂 Checking migrations directory: ${migrationsDir}`);
 		const files = await readdir(migrationsDir);
 
 		// Filter SQL files (exclude meta directory)
