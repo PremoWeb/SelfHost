@@ -37,10 +37,14 @@ ENV LOGGING_DATABASE_URL=file:/data/sqlite-logs.db
 # Set Git repositories root to use volume mount
 ENV GIT_REPOS_ROOT=/data/git-repos
 
+# Copy dependency files
+COPY --link package.json bun.lock* ./
+# Install production dependencies (includes building native modules for the runtime environment)
+RUN bun install --ci --production
+
 # Copy the compiled binary from builder
 COPY --from=builder /app/selfhost-server ./selfhost-server
 # Copy the client assets (static files, JS, CSS)
-# svelte-adapter-bun looks for a 'client' folder in the same directory as the server
 COPY --from=builder /app/build/client ./client
 COPY --link healthcheck.ts ./
 
