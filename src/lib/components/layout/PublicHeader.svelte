@@ -4,7 +4,7 @@
 	import { LogIn } from '@lucide/svelte';
 
 	const navItems = [
-		{ label: 'About', href: '/#about' },
+		{ label: 'About', href: '/' },
 		{ label: 'Documentation', href: '/docs' },
 		{ label: 'FAQs', href: '/docs/faqs' },
 		{ label: 'Sponsors', href: '/sponsors' }

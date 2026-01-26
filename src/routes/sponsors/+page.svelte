@@ -1,9 +1,12 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
+	import PublicHeader from '$lib/components/layout/PublicHeader.svelte';
+	import PublicFooter from '$lib/components/layout/PublicFooter.svelte';
 	import { Heart, Github, Coffee, Building2, Sparkles, Check } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 </script>
 
+<PublicHeader />
 <div class="min-h-screen bg-gradient-to-b from-background to-muted/20">
 	<!-- Hero Section -->
 	<section class="container mx-auto px-4 py-20 text-center">
@@ -291,3 +294,4 @@
 		</div>
 	</section>
 </div>
+<PublicFooter />

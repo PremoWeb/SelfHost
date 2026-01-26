@@ -24,6 +24,8 @@
 		Code2
 	} from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
+	import PublicHeader from '$lib/components/layout/PublicHeader.svelte';
+	import PublicFooter from '$lib/components/layout/PublicFooter.svelte';
 	import type { PageData } from './$types';
 	import OnboardingChecklist from '$lib/components/OnboardingChecklist.svelte';
 	import AddKeyForm from '$lib/components/security/AddKeyForm.svelte';
@@ -34,6 +36,7 @@
 	
 	// Check if we should show landing page
 	const shouldShowLanding = $derived((data as any)?.shouldShowLanding || false);
+	const websiteMode = $derived((data as any)?.websiteMode || false);
 
 	// Modal state for shallow routing
 	let onboardingModalOpen = $state(false);
@@ -92,6 +95,9 @@
 
 {#if shouldShowLanding}
 	<!-- Landing Page Content -->
+	{#if websiteMode}
+		<PublicHeader />
+	{/if}
 	<div class="min-h-screen bg-gradient-to-b from-background to-muted/20">
 		<!-- Hero Section -->
 		<section class="container mx-auto px-4 py-20 text-center">
@@ -186,6 +192,9 @@
 			</div>
 		</section>
 	</div>
+	{#if websiteMode}
+		<PublicFooter />
+	{/if}
 {:else}
 	<!-- Dashboard Content -->
 	<div class="space-y-8">

@@ -73,10 +73,13 @@ SelfHost.gg is designed to be self-hosted, meaning you run it on your own infras
 
 ### Self-Hosted Deployment
 You can deploy SelfHost.gg on:
-- **VPS Providers**: Vultr, DigitalOcean, Linode, Hetzner, etc.
+- **VPS Providers**: Vultr, DigitalOcean, Linode, Hetzner, etc. (even the cheapest options work!)
 - **Cloud Providers**: AWS EC2, Google Cloud Compute, Azure VMs
 - **Bare Metal**: Your own physical servers
 - **Home Lab**: Run it on your home server or NAS
+- **Raspberry Pi**: Even a Raspberry Pi Zero W can run SelfHost.gg thanks to its minimal resource requirements
+
+> **No Static IP?** If you don't have access to a static IP address, consider using a Cloudflare Argo tunnel or similar tunneling solution. This allows you to run SelfHost.gg behind a dynamic IP or NAT, making it accessible from anywhere. See our [Cloudflare Integration](/docs/cloudflare) guide for details.
 
 ### System Requirements
 Since SelfHost.gg is built with SvelteKit, it has minimal resource requirements:

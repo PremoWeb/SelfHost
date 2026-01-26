@@ -8,12 +8,22 @@ import { eq } from 'drizzle-orm';
 import { initializeLoggingDatabase } from '$lib/server/db/init-logging';
 
 export const handle: Handle = async ({ event, resolve }) => {
+	// Detect curl requests and serve installer script
+	const userAgent = event.request.headers.get('user-agent') || '';
+	const isCurl = userAgent.toLowerCase().includes('curl');
+	
+	// If it's a curl request to root, serve the installer
+	if (isCurl && event.url.pathname === '/') {
+		const { redirect } = await import('@sveltejs/kit');
+		throw redirect(302, '/installer');
+	}
+	
 	// Check website mode and public route whitelist
 	const settings = await getInstanceSettings();
 	const websiteMode = settings?.websiteMode || false;
 	
 	// Public route whitelist (accessible without authentication in website mode)
-	const publicRoutes = ['/', '/docs', '/sponsors', '/login', '/register', '/api/auth', '/landing'];
+	const publicRoutes = ['/', '/docs', '/sponsors', '/login', '/register', '/api/auth', '/landing', '/installer'];
 	const isPublicRoute = publicRoutes.some(route => event.url.pathname.startsWith(route));
 	
 	// Get session first to check if user is authenticated
