@@ -297,7 +297,7 @@
 					</TableRow>
 				{:else}
 					<TableRow>
-						<TableCell colspan={8} class="h-24 text-center text-muted-foreground">
+						<TableCell colspan={9} class="h-24 text-center text-muted-foreground">
 							{searchQuery
 								? 'No servers match your search.'
 								: 'No servers found. Add a server to start deploying.'}
@@ -386,6 +386,7 @@
 										<input type="hidden" name="name" value={instance.label || instance.id} />
 										<input type="hidden" name="ip" value={instance.main_ip} />
 										<input type="hidden" name="providerId" value={instance.providerId} />
+										<input type="hidden" name="region" value={instance.region || ''} />
 										<Button
 											type="submit"
 											variant="outline"

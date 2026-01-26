@@ -1,11 +1,12 @@
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { stripFrontmatter } from '$lib/utils/markdown';
+import { getInstanceSettings } from '$lib/server/services/settings';
 
 // Load all markdown files from static/markdown
 const markdownModules = import.meta.glob('/static/markdown/**/*.md', { query: '?raw', import: 'default', eager: true });
 
-export const load: PageServerLoad = async ({ params, url }) => {
+export const load: PageServerLoad = async ({ params, url, parent, locals }) => {
     const slug = params.slug || 'introduction';
     
     // Support both direct .md and nested index.md
@@ -35,7 +36,8 @@ export const load: PageServerLoad = async ({ params, url }) => {
             section: 'Getting Started',
             items: [
                 { title: 'Introduction', path: '/docs/introduction' },
-                { title: 'Installation', path: '/docs/installation' }
+                { title: 'Installation', path: '/docs/installation' },
+                { title: 'FAQs', path: '/docs/faqs' }
             ]
         },
         {
@@ -69,10 +71,16 @@ export const load: PageServerLoad = async ({ params, url }) => {
     // Extract title from slug for now, or you could parse it from frontmatter
     const title = slug.split('/').pop()?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Documentation';
 
+    // Check if we should show public header/footer
+    const instanceSettings = await getInstanceSettings();
+    const websiteMode = !!instanceSettings?.websiteMode;
+    const showPublicHeader = !locals.user && websiteMode;
+
     return {
         slug,
         title,
         content: stripFrontmatter(content),
-        navItems
+        navItems,
+        showPublicHeader
     };
 };

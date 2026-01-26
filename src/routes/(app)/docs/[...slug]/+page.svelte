@@ -8,4 +8,9 @@
 
 <PageTitle title="{data.title} - Documentation" />
 
-<DocLayout content={data.content} title={data.title} navItems={data.navItems} />
+<DocLayout 
+	content={data.content} 
+	title={data.title} 
+	navItems={data.navItems}
+	showPublicHeader={data.showPublicHeader || false}
+/>

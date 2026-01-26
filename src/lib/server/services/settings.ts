@@ -1,5 +1,6 @@
 import { db } from '../db/client';
 import { instanceSettings } from '../db/schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * Get instance settings
@@ -29,6 +30,7 @@ export async function updateInstanceSettings(data: {
 	fqdn?: string;
 	registrationEnabled?: boolean;
 	doNotTrack?: boolean;
+	websiteMode?: boolean;
 }) {
 	const current = await getInstanceSettings();
 	if (!current) {
@@ -53,5 +55,3 @@ export async function updateInstanceSettings(data: {
 
 	return updatedSettings;
 }
-
-import { eq } from 'drizzle-orm';

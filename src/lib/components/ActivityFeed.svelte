@@ -63,7 +63,7 @@
 </script>
 
 {#if events.length > 0}
-	<div class="fixed bottom-4 left-4 z-50">
+	<div class="fixed right-4 bottom-20 z-50">
 		{#if isExpanded}
 			<Card.Root class="w-80 shadow-lg border-2">
 				<Card.Header class="pb-3">

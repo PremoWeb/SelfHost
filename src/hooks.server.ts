@@ -1,15 +1,42 @@
 import type { Handle } from '@sveltejs/kit';
 import { auth } from '$lib/server/auth/better-auth';
 import { getUserCurrentTeam } from '$lib/server/auth/session';
+import { getInstanceSettings } from '$lib/server/services/settings';
 import { db } from '$lib/server/db/client';
 import { teams, sessions } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { initializeLoggingDatabase } from '$lib/server/db/init-logging';
 
 export const handle: Handle = async ({ event, resolve }) => {
+	// Check website mode and public route whitelist
+	const settings = await getInstanceSettings();
+	const websiteMode = settings?.websiteMode || false;
+	
+	// Public route whitelist (accessible without authentication in website mode)
+	const publicRoutes = ['/', '/docs', '/sponsors', '/login', '/register', '/api/auth', '/landing'];
+	const isPublicRoute = publicRoutes.some(route => event.url.pathname.startsWith(route));
+	
+	// Get session first to check if user is authenticated
 	const session = await auth.api.getSession({
 		headers: event.request.headers
 	});
+	
+	// If website mode is enabled and user is NOT authenticated
+	if (websiteMode && !session) {
+		// Allow access to public routes
+		// The root "/" will be handled by (public) route group when website mode is on
+		if (isPublicRoute || event.url.pathname === '/') {
+			// Continue without setting user session for public routes
+			// Don't set locals.user - let the route handle it
+			return resolve(event);
+		}
+		// For non-public routes that aren't "/", redirect to "/" (which will show landing)
+		const { redirect } = await import('@sveltejs/kit');
+		throw redirect(303, '/');
+	}
+	
+	// If website mode is enabled and user IS authenticated, they can access all routes normally
+	// The (app) layout will handle authentication requirements
 
 	if (session) {
 		// Check for Better Auth's built-in user impersonation (from admin plugin)

@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import ContextSwitcher from './ContextSwitcher.svelte';
 	import type { Team } from '$lib/server/db/schema';
+	import { api } from '$lib/api/client';
+	import { toastStore } from '$lib/stores/toast';
 	import {
 		LayoutDashboard,
 		Layers,
@@ -24,7 +26,8 @@
 		Settings,
 		LogOut,
 		BookOpen,
-		FileText
+		FileText,
+		Monitor
 	} from '@lucide/svelte';
 	import SunIcon from '@lucide/svelte/icons/sun';
 	import MoonIcon from '@lucide/svelte/icons/moon';
@@ -52,6 +55,7 @@
 			userId: string;
 		}) => Promise<{ success: boolean; message?: string; data?: any }>;
 		stopImpersonating?: () => Promise<{ success: boolean; message?: string; data?: any }>;
+		websiteMode?: boolean;
 	}
 
 	let {
@@ -65,6 +69,7 @@
 		isGod = false,
 		isImpersonating = false,
 		impersonationType = null,
+		websiteMode = false,
 		switchTeam,
 		switchCompany,
 		impersonateUser,
@@ -74,6 +79,32 @@
 	const shouldShowContextSwitcher = $derived(
 		isGod || teams.length > 0 || companies.length > 0 || isImpersonating || isSuperAdmin
 	);
+
+	let isTogglingWebsiteMode = $state(false);
+
+	async function handleToggleWebsiteMode() {
+		if (isTogglingWebsiteMode) return;
+		
+		isTogglingWebsiteMode = true;
+		try {
+			const newValue = !websiteMode;
+			const response = await api.post('/settings/website-mode', { enabled: newValue });
+			
+			// API returns { data: { success: true, websiteMode: enabled } }
+			// axios wraps it in response.data, so we need response.data.data
+			if (response.data?.data?.success) {
+				// Invalidate all to refresh the page with new website mode
+				await invalidateAll();
+				toastStore.success('Website mode ' + (newValue ? 'enabled' : 'disabled'));
+			} else {
+				toastStore.error(response.data?.data?.message || response.data?.message || 'Failed to toggle website mode');
+			}
+		} catch (error: any) {
+			toastStore.error(error.response?.data?.data?.message || error.response?.data?.message || error.message || 'Failed to toggle website mode');
+		} finally {
+			isTogglingWebsiteMode = false;
+		}
+	}
 
 	const navigationGroups = [
 		{
@@ -133,12 +164,24 @@
 
 <aside class="bg-background fixed inset-y-0 left-0 flex w-64 flex-col border-r">
 	<div class="flex h-16 items-center justify-between border-b px-6">
-		<div class="flex flex-col justify-center">
+		<div 
+			class="flex flex-col justify-center hover:opacity-80 transition-opacity cursor-pointer"
+			onclick={() => goto('/')}
+			role="button"
+			tabindex="0"
+			onkeydown={(e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					goto('/');
+				}
+			}}
+		>
 			<div class="text-lg leading-none font-bold">SelfHost.gg</div>
 			<div class="text-muted-foreground mt-1 text-[10px]">
 				by <a
 					href="https://premoweb.com?utm_source=selfhost&utm_medium=logo&utm_campaign=selfhost"
 					target="_blank"
+					onclick={(e) => e.stopPropagation()}
 					class="text-primary/80 hover:underline">PremoWeb LLC</a
 				>
 			</div>
@@ -226,15 +269,45 @@
 		}
 	</style>
 
-	<div class="border-t p-4">
+	<div class="border-t space-y-2 p-4">
+		{#if isGod}
+			<Button
+				variant="ghost"
+				class="w-full justify-start"
+				onclick={handleToggleWebsiteMode}
+				disabled={isTogglingWebsiteMode}
+			>
+				<Monitor class="mr-2 size-4" />
+				Website Mode
+				<div class="ml-auto">
+					<div class="relative h-4 w-8 rounded-full {websiteMode ? 'bg-primary' : 'bg-muted'}" role="switch" aria-checked={websiteMode}>
+						<div class="absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white transition-transform {websiteMode ? 'translate-x-4' : ''}"></div>
+					</div>
+				</div>
+			</Button>
+		{/if}
 		<form
 			action="/api/auth/logout"
 			method="POST"
 			use:enhance={() => {
-				return async ({ result }) => {
-					if (result.type === 'success') {
-						authStore.logout();
-						await goto('/login');
+				// Clear auth store immediately for better UX
+				authStore.logout();
+				
+				// Return handler for the form submission
+				return async ({ result, update }) => {
+					// If server redirects, invalidate all data and update
+					// This ensures fresh data is loaded after logout
+					if (result.type === 'redirect') {
+						// Invalidate all data to force fresh load after logout
+						await invalidateAll();
+						await update();
+					} else if (result.type === 'success') {
+						// If server returned JSON (API call), invalidate and navigate manually
+						await invalidateAll();
+						await goto('/');
+					} else if (result.type === 'failure' || result.type === 'error') {
+						// Handle errors
+						toastStore.error('Failed to sign out');
 					}
 				};
 			}}

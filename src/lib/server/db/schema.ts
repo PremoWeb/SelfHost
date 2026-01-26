@@ -8,6 +8,7 @@ export const instanceSettings = sqliteTable('instance_settings', {
 	registrationEnabled: integer('registration_enabled', { mode: 'boolean' }).default(true).notNull(),
 	doNotTrack: integer('do_not_track', { mode: 'boolean' }).default(false).notNull(),
 	isCloudSetup: integer('is_cloud_setup', { mode: 'boolean' }).default(false).notNull(),
+	websiteMode: integer('website_mode', { mode: 'boolean' }).default(false).notNull(),
 	instanceId: text('instance_id').unique(),
 	createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`).notNull(),
 	updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`(unixepoch())`).notNull()

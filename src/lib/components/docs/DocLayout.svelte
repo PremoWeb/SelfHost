@@ -1,6 +1,8 @@
 <script lang="ts">
 	import DocSidebar from './DocSidebar.svelte';
 	import TableOfContents from './TableOfContents.svelte';
+	import PublicHeader from '$lib/components/layout/PublicHeader.svelte';
+	import PublicFooter from '$lib/components/layout/PublicFooter.svelte';
 	import { page } from '$app/state';
 	import {
 		processMarkdown,
@@ -26,11 +28,13 @@
 	const {
 		content = '',
 		title = '',
-		navItems = []
+		navItems = [],
+		showPublicHeader = false
 	} = $props<{
 		content: string;
 		title?: string;
 		navItems: NavSection[];
+		showPublicHeader?: boolean;
 	}>();
 
 	let htmlContent = $state('');
@@ -256,10 +260,14 @@
 	});
 </script>
 
+{#if showPublicHeader}
+	<PublicHeader />
+{/if}
+
 <div class="container mx-auto px-4">
 	<!-- Sticky Breadcrumbs -->
 	<div
-		class="border-border/40 bg-background/80 sticky top-0 z-20 -mx-4 mb-8 border-b px-4 py-4 backdrop-blur-md lg:top-0"
+		class="border-border/40 bg-background/80 sticky z-20 -mx-4 mb-8 border-b px-4 py-4 backdrop-blur-md {showPublicHeader ? 'top-16' : 'top-0 lg:top-0'}"
 	>
 		<nav class="text-muted-foreground/60 flex items-center gap-2 text-xs">
 			<a href="/" class="hover:text-primary flex items-center gap-1 transition-colors">
@@ -278,7 +286,7 @@
 	<div class="grid grid-cols-1 gap-12 lg:grid-cols-12">
 		<!-- Sidebar -->
 		<aside class="lg:col-span-3">
-			<div class="sticky top-24">
+			<div class="sticky {showPublicHeader ? 'top-24' : 'top-24'}">
 				<DocSidebar {navItems} />
 			</div>
 		</aside>
@@ -382,12 +390,16 @@
 
 		<!-- TOC -->
 		<aside class="hidden xl:col-span-3 xl:block">
-			<div class="sticky top-24">
+			<div class="sticky {showPublicHeader ? 'top-24' : 'top-24'}">
 				<TableOfContents {headings} />
 			</div>
 		</aside>
 	</div>
 </div>
+
+{#if showPublicHeader}
+	<PublicFooter />
+{/if}
 
 <style>
 	/* Code Block & Shiki Enhancements */

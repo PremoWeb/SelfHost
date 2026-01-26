@@ -81,6 +81,8 @@ export const actions: Actions = {
 		const ip = formData.get('ip') as string;
 		const providerId = formData.get('providerId') as string;
 		const companyId = formData.get('companyId') as string | null;
+		const instanceId = formData.get('instanceId') as string;
+		const region = formData.get('region') as string | null;
 
 		// Determine company assignment: use provided companyId, or default company, or null (god user)
 		let assignedCompanyId: string | null = companyId || null;
@@ -89,6 +91,7 @@ export const actions: Actions = {
 		}
 
 		try {
+
 			await createServer({
 				name,
 				ip,
@@ -97,7 +100,8 @@ export const actions: Actions = {
 				teamId: locals.team?.id || null,
 				vpsProviderId: providerId,
 				status: 'offline',
-				companyId: assignedCompanyId
+				companyId: assignedCompanyId,
+				region
 			});
 
 			return { success: true };

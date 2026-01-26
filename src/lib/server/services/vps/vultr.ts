@@ -162,6 +162,44 @@ export class VultrService {
 		const response = await this.client.patch(`/domains/${domainName}/records/${recordId}`, params);
 		return response.data.record;
 	}
+
+	/**
+	 * Get IPv4 addresses and their reverse DNS (PTR) records for an instance
+	 */
+	async getInstanceIpv4(instanceId: string) {
+		const response = await this.client.get(`/instances/${instanceId}/ipv4`);
+		return response.data.ipv4s || [];
+	}
+
+	/**
+	 * Set reverse DNS (PTR) record for an IPv4 address
+	 */
+	async setIpv4ReverseDns(instanceId: string, ip: string, reverseDns: string) {
+		const response = await this.client.post(`/instances/${instanceId}/ipv4/reverse`, {
+			ip,
+			reverse: reverseDns
+		});
+		return response.data;
+	}
+
+	/**
+	 * Get IPv6 addresses and their reverse DNS (PTR) records for an instance
+	 */
+	async getInstanceIpv6(instanceId: string) {
+		const response = await this.client.get(`/instances/${instanceId}/ipv6`);
+		return response.data.ipv6s || [];
+	}
+
+	/**
+	 * Set reverse DNS (PTR) record for an IPv6 address
+	 */
+	async setIpv6ReverseDns(instanceId: string, ip: string, reverseDns: string) {
+		const response = await this.client.post(`/instances/${instanceId}/ipv6/reverse`, {
+			ip,
+			reverse: reverseDns
+		});
+		return response.data;
+	}
 }
 
 /**

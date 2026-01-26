@@ -28,10 +28,12 @@
 	let sidebarOpen = $state(false);
 
 	$effect(() => {
+		// (app) layout is only for authenticated users
 		if (data?.user) {
 			// Type assertion to handle missing emailVerifiedAt field
 			authStore.setUser(data.user as any, data.team as any);
 		} else {
+			// No user - should not happen in (app) group, but handle gracefully
 			authStore.setLoading(false);
 		}
 	});
@@ -123,20 +125,27 @@
 		</div>
 	{/if}
 
-	<Sidebar bind:sidebarOpen currentTeam={data.team} activeCompany={layoutData.activeCompany} teams={data.teams} companies={layoutData.companies || []} users={layoutData.users || []} isSuperAdmin={data.isSuperAdmin || false} isGod={data.isGod || false} isImpersonating={data.isImpersonating || false} impersonationType={data.impersonationType || layoutData.impersonationType} {switchTeam} {switchCompany} impersonateUser={impersonateUser} stopImpersonating={async () => await stopImpersonating({} as any)} />
+	{#if data?.user}
+		{@const sidebarData = data as any}
+		<Sidebar bind:sidebarOpen currentTeam={data.team} activeCompany={layoutData.activeCompany} teams={data.teams} companies={layoutData.companies || []} users={layoutData.users || []} isSuperAdmin={sidebarData.isSuperAdmin || false} isGod={sidebarData.isGod || false} isImpersonating={sidebarData.isImpersonating || false} impersonationType={sidebarData.impersonationType || layoutData.impersonationType} websiteMode={sidebarData.websiteMode || false} {switchTeam} {switchCompany} impersonateUser={impersonateUser} stopImpersonating={async () => await stopImpersonating({} as any)} />
+	{/if}
 
-	<main class="pl-64" class:pt-14={shouldShowBanner}>
+	<main class:pl-64={!!data?.user} class:pt-14={shouldShowBanner && !!data?.user}>
 		<div class="w-full max-w-none px-8 py-6">
 			{@render children?.()}
 		</div>
 	</main>
 
-	<ActivityFeed />
-	<CommandMenu />
+	{#if data?.user}
+		<ActivityFeed />
+		<CommandMenu />
+	{/if}
 
-	<div
-		class="border-border/40 bg-background/95 text-muted-foreground supports-backdrop-filter:bg-background/60 fixed right-4 bottom-4 z-50 flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[10px] font-medium shadow-sm backdrop-blur"
-	>
-		<span class="text-xs">⌘</span>K
-	</div>
+	{#if data?.user}
+		<div
+			class="border-border/40 bg-background/95 text-muted-foreground supports-backdrop-filter:bg-background/60 fixed right-4 bottom-4 z-50 flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[10px] font-medium shadow-sm backdrop-blur"
+		>
+			<span class="text-xs">⌘</span>K
+		</div>
+	{/if}
 </div>

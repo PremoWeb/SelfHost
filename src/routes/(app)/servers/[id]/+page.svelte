@@ -137,6 +137,12 @@
 	let isValidating = $state(false);
 	let isInstallingAgent = $state(false);
 	let isRestartingAgent = $state(false);
+	let isLoadingReverseDns = $state(false);
+	let isUpdatingReverseDns = $state(false);
+	let reverseDnsData = $state<{ ipv4s: Array<{ ip: string; reverse: string | null }>; ipv6s: Array<{ ip: string; reverse: string | null }> }>({
+		ipv4s: [],
+		ipv6s: []
+	});
 	let isRebootingServer = $state(false);
 	let isRebootDialogOpen = $state(false);
 	let logScrollContainer2 = $state<HTMLDivElement | null>(null);
@@ -396,6 +402,64 @@
 			isValidating = false;
 		}
 	}
+
+	async function handleRefreshReverseDns() {
+		if (!server.vpsProviderId || server.providerName !== 'Vultr') return;
+		
+		isLoadingReverseDns = true;
+		try {
+			const response = await fetch(`/api/servers/${server.id}/reverse-dns`);
+			if (response.ok) {
+				const data = await response.json();
+				reverseDnsData = {
+					ipv4s: data.data?.ipv4s || [],
+					ipv6s: data.data?.ipv6s || []
+				};
+			} else {
+				const error = await response.json();
+				toastStore.error(error.message || 'Failed to load reverse DNS records');
+			}
+		} catch (error: any) {
+			toastStore.error(error.message || 'Failed to load reverse DNS records');
+		} finally {
+			isLoadingReverseDns = false;
+		}
+	}
+
+	async function handleUpdateReverseDns(type: 'ipv4' | 'ipv6', ip: string, reverseDns: string) {
+		if (!server.vpsProviderId || server.providerName !== 'Vultr') return;
+		
+		isUpdatingReverseDns = true;
+		try {
+			const response = await fetch(`/api/servers/${server.id}/reverse-dns`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ type, ip, reverseDns })
+			});
+			
+			if (response.ok) {
+				toastStore.success('Reverse DNS record updated successfully');
+				// Refresh the data
+				await handleRefreshReverseDns();
+			} else {
+				const error = await response.json();
+				toastStore.error(error.message || 'Failed to update reverse DNS record');
+			}
+		} catch (error: any) {
+			toastStore.error(error.message || 'Failed to update reverse DNS record');
+		} finally {
+			isUpdatingReverseDns = false;
+		}
+	}
+
+	// Track active tab to load reverse DNS only when Advanced tab is accessed
+	let activeTab = $state('overview');
+	
+	$effect(() => {
+		if (activeTab === 'advanced' && server.vpsProviderId && server.providerName === 'Vultr') {
+			handleRefreshReverseDns();
+		}
+	});
 
 	async function handleDelete() {
 		try {
@@ -849,7 +913,7 @@
 	<PageTitle title={server.name} />
 
 	<div class="space-y-6">
-		<Tabs.Root value="overview" class="space-y-6">
+		<Tabs.Root value={activeTab} onValueChange={(value) => activeTab = value} class="space-y-6">
 			<StickyHeader class="space-y-4">
 				<div class="flex flex-col gap-4 pb-6 md:flex-row md:items-center md:justify-between">
 					<div class="flex flex-col gap-1">
@@ -1100,6 +1164,14 @@
 							<Badge variant="secondary" class="ml-2">{data.deployedApps.length}</Badge>
 						{/if}
 					</Tabs.Trigger>
+					{#if server.vpsProviderId && server.providerName === 'Vultr'}
+						<Tabs.Trigger
+							value="advanced"
+							class="data-[state=active]:border-primary rounded-none border-b-2 border-transparent px-4 py-2 data-[state=active]:bg-transparent"
+						>
+							Advanced
+						</Tabs.Trigger>
+					{/if}
 				</Tabs.List>
 			</StickyHeader>
 			<Tabs.Content value="overview" class="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_240px]">
@@ -2644,6 +2716,145 @@
 					{/if}
 				</div>
 			</Tabs.Content>
+			{#if server.vpsProviderId && server.providerName === 'Vultr'}
+				<Tabs.Content value="advanced" class="space-y-6">
+					<div class="space-y-4">
+						<div class="space-y-1">
+							<h2 class="text-xl font-bold tracking-tight">Advanced Settings</h2>
+							<p class="text-muted-foreground text-sm">
+								Manage reverse DNS (PTR) records for IPv4 and IPv6 addresses on Vultr-managed servers.
+							</p>
+						</div>
+
+						<Card.Root>
+							<Card.Header>
+								<Card.Title>Reverse DNS (PTR) Records</Card.Title>
+								<Card.Description>
+									Set reverse DNS records for your server's IP addresses. This helps with email deliverability and server identification.
+								</Card.Description>
+							</Card.Header>
+							<Card.Content class="space-y-6">
+								<!-- IPv4 Reverse DNS -->
+								<div class="space-y-4">
+									<div class="space-y-2">
+										<h3 class="text-sm font-semibold">IPv4 Addresses</h3>
+										{#if reverseDnsData.ipv4s && reverseDnsData.ipv4s.length > 0}
+											<div class="space-y-3">
+												{#each reverseDnsData.ipv4s as ipv4}
+													<div class="flex items-start gap-4 rounded-lg border p-4">
+														<div class="flex-1 space-y-2">
+															<div class="flex items-center gap-2">
+																<Label class="font-mono text-sm">{ipv4.ip}</Label>
+																{#if ipv4.reverse}
+																	<Badge variant="outline" class="text-xs">
+																		{ipv4.reverse}
+																	</Badge>
+																{/if}
+															</div>
+															<Input
+																placeholder="e.g., mail.example.com"
+																value={ipv4.reverse || ''}
+																oninput={(e) => {
+																	ipv4.reverse = e.currentTarget.value;
+																	reverseDnsData.ipv4s = [...reverseDnsData.ipv4s];
+																}}
+															/>
+														</div>
+														<Button
+															size="sm"
+															onclick={() => handleUpdateReverseDns('ipv4', ipv4.ip, ipv4.reverse || '')}
+															disabled={isUpdatingReverseDns}
+														>
+															{#if isUpdatingReverseDns}
+																<Loader2 class="mr-2 size-4 animate-spin" />
+															{:else}
+																<Save class="mr-2 size-4" />
+															{/if}
+															Update
+														</Button>
+													</div>
+												{/each}
+											</div>
+										{:else if isLoadingReverseDns}
+											<div class="flex items-center justify-center py-8">
+												<Loader2 class="size-6 animate-spin text-muted-foreground" />
+											</div>
+										{:else}
+											<p class="text-muted-foreground text-sm">No IPv4 addresses found</p>
+										{/if}
+									</div>
+								</div>
+
+								<!-- IPv6 Reverse DNS -->
+								<div class="space-y-4">
+									<div class="space-y-2">
+										<h3 class="text-sm font-semibold">IPv6 Addresses</h3>
+										{#if reverseDnsData.ipv6s && reverseDnsData.ipv6s.length > 0}
+											<div class="space-y-3">
+												{#each reverseDnsData.ipv6s as ipv6}
+													<div class="flex items-start gap-4 rounded-lg border p-4">
+														<div class="flex-1 space-y-2">
+															<div class="flex items-center gap-2">
+																<Label class="font-mono text-xs">{ipv6.ip}</Label>
+																{#if ipv6.reverse}
+																	<Badge variant="outline" class="text-xs">
+																		{ipv6.reverse}
+																	</Badge>
+																{/if}
+															</div>
+															<Input
+																placeholder="e.g., mail.example.com"
+																value={ipv6.reverse || ''}
+																oninput={(e) => {
+																	ipv6.reverse = e.currentTarget.value;
+																	reverseDnsData.ipv6s = [...reverseDnsData.ipv6s];
+																}}
+															/>
+														</div>
+														<Button
+															size="sm"
+															onclick={() => handleUpdateReverseDns('ipv6', ipv6.ip, ipv6.reverse || '')}
+															disabled={isUpdatingReverseDns}
+														>
+															{#if isUpdatingReverseDns}
+																<Loader2 class="mr-2 size-4 animate-spin" />
+															{:else}
+																<Save class="mr-2 size-4" />
+															{/if}
+															Update
+														</Button>
+													</div>
+												{/each}
+											</div>
+										{:else if isLoadingReverseDns}
+											<div class="flex items-center justify-center py-8">
+												<Loader2 class="size-6 animate-spin text-muted-foreground" />
+											</div>
+										{:else}
+											<p class="text-muted-foreground text-sm">No IPv6 addresses found</p>
+										{/if}
+									</div>
+								</div>
+
+								<div class="flex justify-end">
+									<Button
+										variant="outline"
+										onclick={handleRefreshReverseDns}
+										disabled={isLoadingReverseDns}
+									>
+										{#if isLoadingReverseDns}
+											<Loader2 class="mr-2 size-4 animate-spin" />
+										{:else}
+											<RefreshCcw class="mr-2 size-4" />
+										{/if}
+										Refresh
+									</Button>
+								</div>
+							</Card.Content>
+						</Card.Root>
+					</div>
+				</Tabs.Content>
+			{/if}
 		</Tabs.Root>
 	</div>
 

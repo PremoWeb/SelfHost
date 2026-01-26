@@ -3,14 +3,25 @@
 	import { onMount } from 'svelte';
 	import { toastStore } from '$lib/stores/toast';
 	import { authClient } from '$lib/auth-client';
-	import { Mail, Lock, Loader2, ArrowRight, ShieldCheck, Rocket } from '@lucide/svelte';
+	import { Mail, Lock, Loader2, ArrowRight, ShieldCheck, Rocket, ArrowLeft } from '@lucide/svelte';
 	import PageTitle from '$lib/components/PageTitle.svelte';
+	import type { PageData } from './$types';
 
+	let { data }: { data: PageData } = $props();
 	let email = $state('');
 	let password = $state('');
 	let errors = $state<Record<string, string>>({});
 	let isLoading = $state(false);
 	let mounted = $state(false);
+	
+	const websiteMode = $derived((data as any)?.websiteMode ?? false);
+	
+	// Debug: Check if data is loading correctly
+	$effect(() => {
+		if (mounted && data) {
+			console.log('[Login] websiteMode from data:', (data as any)?.websiteMode, 'Full data:', data);
+		}
+	});
 
 	onMount(() => {
 		mounted = true;
@@ -81,6 +92,15 @@
 		<div
 			class="bg-card border-border/50 animate-in fade-in zoom-in-95 rounded-3xl border p-8 shadow-2xl backdrop-blur-xl duration-700"
 		>
+			<div class="mb-6 -mt-2">
+				<a
+					href="/"
+					class="text-muted-foreground hover:text-foreground group inline-flex items-center gap-2 text-sm font-medium transition-colors"
+				>
+					<ArrowLeft class="size-4 transition-transform group-hover:-translate-x-1" />
+					Go back to site
+				</a>
+			</div>
 			<form onsubmit={handleLogin} class="space-y-6">
 				<!-- Email Field -->
 				<div class="space-y-2">

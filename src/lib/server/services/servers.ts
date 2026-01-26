@@ -59,6 +59,7 @@ export async function getServersByTeam(teamId: string | null | undefined) {
             agentInstalledAt: row.agent_installed_at ? new Date(row.agent_installed_at as string) : null,
             providerName: row.provider_name,
             providerType: row.provider_type,
+            region: row.region || null,
             createdAt: new Date(row.created_at as string),
             updatedAt: new Date(row.updated_at as string)
         })) as any[];
