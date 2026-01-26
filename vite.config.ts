@@ -27,5 +27,13 @@ export default defineConfig({
 	},
 	ssr: {
 		noExternal: ['bits-ui']
-	}
+	},
+    build: {
+        rollupOptions: {
+            onwarn(warning, warn) {
+                if (warning.code === 'UNUSED_EXTERNAL_IMPORT' && (warning as any).source?.includes('better-auth')) return;
+                warn(warning);
+            }
+        }
+    }
 });
