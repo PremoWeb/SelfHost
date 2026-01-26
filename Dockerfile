@@ -10,7 +10,7 @@ COPY --link package.json bun.lock* ./
 RUN bun install --ci
 
 COPY --link src/ ./src/
-COPY --link svelte.config.js tsconfig.json vite.config.ts ./
+COPY --link svelte.config.js tsconfig.json vite.config.ts agent-websocket-plugin.ts ./
 COPY --link static/ ./static/
 COPY --link drizzle/ ./drizzle/
 
