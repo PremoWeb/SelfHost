@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { db } from '../db/client';
 import { cloudflareAccessTokens } from '../db/schema';
 import { eq } from 'drizzle-orm';
+import { bin as cloudflaredBin } from 'cloudflared';
 
 /**
  * Service to handle Cloudflare Access Tunnel connections
@@ -12,6 +13,7 @@ export class CloudflareAccessService {
      * This can be used as the 'sock' for ssh2 connection
      */
     static async getSshProxyStream(hostname: string, tokenId: string | null) {
+        // Use 'access ssh' which is designed for ProxyCommand usage (stdio)
         const args = ['access', 'ssh', '--hostname', hostname];
 
         if (tokenId) {
@@ -27,13 +29,20 @@ export class CloudflareAccessService {
             }
         }
 
-        console.log(`Starting cloudflared with args: ${args.join(' ')}`);
-        const proc = spawn('cloudflared', args);
+        console.log(`Starting cloudflared [VERSION 2 - SSH] with args: ${args.join(' ')}`);
+        console.log(`Using cloudflared binary at: ${cloudflaredBin}`);
+        
+        // Inherit environment variables (important for HOME, etc)
+        const proc = spawn(cloudflaredBin, args, {
+            env: process.env,
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
 
         // We return a Duplex-like object that ssh2 can use
         return {
             stdout: proc.stdout,
             stdin: proc.stdin,
+            stderr: proc.stderr,
             proc // Keep reference to kill it later
         };
     }

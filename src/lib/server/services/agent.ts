@@ -204,8 +204,16 @@ export async function installAgent(
 												// Step 1: Install Dependencies (Bun, etc.)
 												if (!existingBunPath) {
 													onProgress?.('installing_bun', 'Installing Bun runtime and dependencies...');
+													
+													// Detect and install dependencies based on package manager
+													// For apt: try install first (works if packages in cache), update only if install fails
+													// Make update non-fatal to handle problematic enterprise repos (like Proxmox)
+													const depsCmd = initSystem === 'openrc' 
+														? `${s}apk add curl bash unzip`
+														: `(${s}command -v apt-get >/dev/null 2>&1 && (${s}DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --fix-missing curl unzip bash 2>/dev/null || (${s}DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>&1 | grep -vE "(401 Unauthorized|is not signed|Failed to fetch)" >&2; true); ${s}DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --fix-missing curl unzip bash)) || (${s}command -v yum >/dev/null 2>&1 && ${s}yum install -y -q curl unzip bash) || (${s}command -v dnf >/dev/null 2>&1 && ${s}dnf install -y -q curl unzip bash) || true`;
+													
 													const installCmds = [
-														initSystem === 'openrc' ? `${s}apk add curl bash unzip` : 'true',
+														depsCmd,
 														'command -v bun >/dev/null 2>&1 || (curl -fsSL https://bun.sh/install | bash)',
 														`export BUN_INSTALL="$HOME/.bun"`,
 														`export PATH="$BUN_INSTALL/bin:$PATH"`,

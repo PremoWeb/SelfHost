@@ -215,6 +215,8 @@ export interface CreateServerDto {
 	user?: string;
 	private_key_id: number;
 	tags?: string[];
+	cloudflare_tunnel_hostname?: string | null;
+	cloudflare_access_token_id?: string | null;
 }
 
 export interface UpdateServerDto {

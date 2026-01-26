@@ -399,11 +399,21 @@
 
 	async function handleDelete() {
 		try {
-			await serversApi.delete(server.id);
+			const response = await serversApi.delete(server.id);
 			toastStore.success('Server removed');
-			window.location.href = '/servers';
-		} catch (error) {
-			toastStore.error('Failed to remove server');
+			goto('/servers');
+		} catch (error: any) {
+			// Handle different error formats
+			let errorMessage = 'Failed to remove server';
+			if (error.response?.data?.message) {
+				errorMessage = error.response.data.message;
+			} else if (error.response?.data?.data?.message) {
+				errorMessage = error.response.data.data.message;
+			} else if (error.message) {
+				errorMessage = error.message;
+			}
+			toastStore.error(errorMessage);
+			console.error('Failed to delete server:', error);
 		}
 	}
 
@@ -495,12 +505,15 @@
 								const index = installProgress.findIndex((p) => p.step === data.step);
 
 								if (index !== -1) {
-									// Mark previous steps as success
-									for (let i = 0; i < index; i++) {
-										installProgress[i].status = 'success';
-									}
-									installProgress[index].status = 'in-progress';
-									installProgress[index].message = data.message;
+									// Mark previous steps as success - create new array for reactivity
+									installProgress = installProgress.map((p, i) => {
+										if (i < index) {
+											return { ...p, status: 'success' as const };
+										} else if (i === index) {
+											return { ...p, status: 'in-progress' as const, message: data.message };
+										}
+										return p;
+									});
 								} else if (data.step === 'log') {
 									installLogs += data.message;
 									setTimeout(() => {
@@ -509,7 +522,7 @@
 										}
 									}, 0);
 								} else if (data.step === 'complete') {
-									installProgress.forEach((p) => (p.status = 'success'));
+									installProgress = installProgress.map((p) => ({ ...p, status: 'success' as const }));
 									server.connectionType = 'agent';
 
 									// Automatically force-update the service config to ensure it's correct
@@ -526,13 +539,15 @@
 									}
 
 									toastStore.success('SelfHost Agent installed successfully!');
+									
+									// Invalidate page data to refresh server status (will update from "waiting" to "online" when agent connects)
+									await invalidateAll();
 								} else if (data.step === 'error') {
-									const current =
-										installProgress.find((p) => p.status === 'in-progress') ||
-										installProgress.find((p) => p.status === 'pending');
-									if (current) {
-										current.status = 'error';
-										current.message = data.message;
+									const errorIndex = installProgress.findIndex((p) => p.status === 'in-progress' || p.status === 'pending');
+									if (errorIndex !== -1) {
+										installProgress = installProgress.map((p, i) => 
+											i === errorIndex ? { ...p, status: 'error' as const, message: data.message } : p
+										);
 									}
 									toastStore.error(data.message);
 								}
@@ -735,7 +750,7 @@
 	}
 
 	let debugLogs = $state('');
-	let logEventSource: EventSource | null = null;
+	let logEventSource = $state<EventSource | null>(null);
 	let hasConnected = $state(false);
 	let logScrollContainer = $state<HTMLDivElement | null>(null);
 
@@ -752,8 +767,16 @@
 		es.onmessage = (event) => {
 			try {
 				const data = JSON.parse(event.data);
-				if (data.type === 'status' && data.message === 'connected') {
-					hasConnected = true;
+				if (data.type === 'status') {
+					if (data.message === 'initializing') {
+						// Show immediate feedback that connection is starting
+						debugLogs = '[System] Initializing connection...\n';
+					} else if (data.message === 'connecting_via_tunnel') {
+						debugLogs = '[System] Connecting via Cloudflare tunnel...\n';
+					} else if (data.message === 'connected') {
+						hasConnected = true;
+						debugLogs += '[System] Connection established. Streaming logs...\n';
+					}
 				}
 				if (data.log) {
 					hasConnected = true;
@@ -767,6 +790,7 @@
 					}, 0);
 				}
 				if (data.error) {
+					hasConnected = true;
 					debugLogs += `\n[Error] ${data.error}\n`;
 				}
 			} catch (e) {}

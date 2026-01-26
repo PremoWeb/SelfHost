@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { enhance } from '$app/forms';
 	import { serversApi } from '$lib/api/resources/servers';
 	import { toastStore } from '$lib/stores/toast';
@@ -24,6 +24,9 @@
 	import { Plus, Server, Search, ArrowUpDown } from '@lucide/svelte';
 
 	import RegisterServerForm from '$lib/components/servers/RegisterServerForm.svelte';
+	import ServerRegistrationWizard from '$lib/components/servers/ServerRegistrationWizard.svelte';
+	import { page } from '$app/state';
+	import * as Sheet from '$lib/components/ui/sheet';
 
 	let { data }: { data: PageData } = $props();
 
@@ -32,6 +35,21 @@
 	let sortField = $state<'name' | 'status' | 'region'>('name');
 	let sortOrder = $state<'asc' | 'desc'>('asc');
 	let isImporting = $state<string | null>(null);
+
+	// Shallow route state for Wizard
+	let isWizardOpen = $derived(page.url.searchParams.get('register') === 'true');
+
+	function openWizard() {
+		const url = new URL(page.url);
+		url.searchParams.set('register', 'true');
+		goto(url.toString(), { replaceState: false, noScroll: true });
+	}
+
+	function closeWizard() {
+		const url = new URL(page.url);
+		url.searchParams.delete('register');
+		goto(url.toString(), { replaceState: false, noScroll: true });
+	}
 
 	// Filtered and sorted servers
 	let filteredServers = $derived(
@@ -90,7 +108,7 @@
 				<h1 class="text-3xl font-bold tracking-tight">Servers</h1>
 				<p class="text-muted-foreground">Manage your infrastructure nodes and cloud instances.</p>
 			</div>
-			<Button onclick={() => (showAddModal = true)}>
+			<Button onclick={openWizard}>
 				<Plus class="mr-2 size-4" />
 				Register Server
 			</Button>
@@ -129,6 +147,7 @@
 							<ArrowUpDown class="size-3" />
 						</button>
 					</TableHead>
+					<TableHead>Type</TableHead>
 					<TableHead>Connection</TableHead>
 					<TableHead>
 						<button
@@ -189,6 +208,28 @@
 								>
 							{:else}
 								<Badge variant="outline" class="border-gray-200 text-gray-600">Offline</Badge>
+							{/if}
+						</TableCell>
+						<TableCell>
+							{#if true}
+								{@const isProxmox = server.tags && server.tags.includes('proxmox')}
+								{@const serverType = isProxmox ? 'Proxmox' : (server.providerName || 'Custom')}
+								<div class="flex flex-col gap-1">
+									<Badge
+										variant="secondary"
+										class="w-fit border-blue-200 bg-blue-100/50 px-1.5 py-0 text-[10px] text-blue-700 uppercase"
+									>
+										{serverType}
+									</Badge>
+									{#if server.cloudflareTunnelHostname}
+										<Badge
+											variant="secondary"
+											class="w-fit border-purple-200 bg-purple-100/50 px-1.5 py-0 text-[10px] text-purple-700 uppercase"
+										>
+											Tunnel
+										</Badge>
+									{/if}
+								</div>
 							{/if}
 						</TableCell>
 						<TableCell>
@@ -256,7 +297,7 @@
 					</TableRow>
 				{:else}
 					<TableRow>
-						<TableCell colspan={7} class="h-24 text-center text-muted-foreground">
+						<TableCell colspan={8} class="h-24 text-center text-muted-foreground">
 							{searchQuery
 								? 'No servers match your search.'
 								: 'No servers found. Add a server to start deploying.'}
@@ -364,12 +405,17 @@
 	{/if}
 </div>
 
-<Dialog.Root bind:open={showAddModal}>
-	<Dialog.Content class="sm:max-w-[425px]">
-		<Dialog.Header>
-			<Dialog.Title>Register Server</Dialog.Title>
-			<Dialog.Description>Add a new server via SSH connection.</Dialog.Description>
-		</Dialog.Header>
-		<RegisterServerForm privateKeys={data.privateKeys} onSuccess={() => (showAddModal = false)} />
-	</Dialog.Content>
-</Dialog.Root>
+<Sheet.Root
+	open={isWizardOpen}
+	onOpenChange={(open) => {
+		if (!open) closeWizard();
+	}}
+>
+	<Sheet.Content side="right" class="w-full p-0 sm:max-w-xl">
+		<ServerRegistrationWizard
+			privateKeys={data.privateKeys}
+			accessTokens={data.accessTokens}
+			onClose={closeWizard}
+		/>
+	</Sheet.Content>
+</Sheet.Root>

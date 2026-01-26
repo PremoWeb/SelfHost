@@ -14,8 +14,11 @@ export async function getServersByTeam(teamId: string | null | undefined) {
             SELECT 
                 s.*,
                 COALESCE(app_counts.count, 0) + COALESCE(qd_counts.count, 0) as application_count,
-                COALESCE(db_counts.count, 0) as database_count
+                COALESCE(db_counts.count, 0) as database_count,
+                p.name as provider_name,
+                p.type as provider_type
             FROM ${servers} s
+            LEFT JOIN vps_providers p ON s.vps_provider_id = p.id
             LEFT JOIN (
                 SELECT d.server_id, COUNT(a.id) as count
                 FROM ${destinations} d
@@ -50,9 +53,12 @@ export async function getServersByTeam(teamId: string | null | undefined) {
             connectionType: row.connection_type,
             privateKeyId: row.private_key_id,
             vpsProviderId: row.vps_provider_id,
+            cloudflareTunnelHostname: row.cloudflare_tunnel_hostname,
             agentChecksum: row.agent_checksum,
             agentVersion: row.agent_version,
             agentInstalledAt: row.agent_installed_at ? new Date(row.agent_installed_at as string) : null,
+            providerName: row.provider_name,
+            providerType: row.provider_type,
             createdAt: new Date(row.created_at as string),
             updatedAt: new Date(row.updated_at as string)
         })) as any[];
@@ -116,6 +122,8 @@ export async function getServerById(serverId: string, teamId: string | null | un
             agentChecksum: row.agent_checksum,
             agentVersion: row.agent_version,
             agentInstalledAt: row.agent_installed_at ? new Date(row.agent_installed_at as string) : null,
+            cloudflareTunnelHostname: row.cloudflare_tunnel_hostname,
+            cloudflareAccessTokenId: row.cloudflare_access_token_id,
             createdAt: new Date(row.created_at as string),
             updatedAt: new Date(row.updated_at as string),
             proxyType: row.proxy_type,

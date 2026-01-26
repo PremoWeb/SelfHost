@@ -74,6 +74,7 @@
 		"bcrypt": "^6.0.0",
 		"better-auth": "^1.4.17",
 		"casbin": "^5.48.0",
+		"cloudflared": "^0.7.1",
 		"cmdk-sv": "^0.0.19",
 		"dotenv": "^17.2.3",
 		"drizzle-orm": "^0.45.1",

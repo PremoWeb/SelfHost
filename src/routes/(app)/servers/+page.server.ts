@@ -1,6 +1,6 @@
 import { getServersByTeam, createServer } from '$lib/server/services/servers';
 import { getVpsProvidersByTeam } from '$lib/server/services/vps/providers';
-import { getPrivateKeysByTeam } from '$lib/server/services/security';
+import { getPrivateKeysByTeam, getCloudflareAccessTokensByTeam } from '$lib/server/services/security';
 import { getVultrInstances } from '$lib/server/services/vps/vultr';
 import { getLocalAgentChecksum } from '$lib/server/services/agent';
 import { fail } from '@sveltejs/kit';
@@ -31,6 +31,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const localAgentChecksum = await getLocalAgentChecksum();
 
 	// ... rest of the load function
+	 // Fetch access tokens
+	const accessTokens = await getCloudflareAccessTokensByTeam(teamId);
+
 	// Fetch VPS instances from all connected providers
 	let discoveredInstances: any[] = [];
 	
@@ -60,6 +63,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		servers,
 		vpsProviders,
 		privateKeys,
+		accessTokens,
 		discoveredInstances,
 		localAgentChecksum
 	};

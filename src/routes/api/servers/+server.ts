@@ -18,7 +18,19 @@ export const GET: RequestHandler = async ({ locals }) => {
 export const POST: RequestHandler = async ({ request, locals }) => {
 	await requireApiAuth(locals);
 
-	const { name, description, ip, port, user, vpsProviderId, privateKeyId, companyId } = await request.json();
+	const { 
+		name, 
+		description, 
+		ip, 
+		port, 
+		user, 
+		vpsProviderId, 
+		privateKeyId, 
+		companyId,
+		tags,
+		cloudflare_tunnel_hostname,
+		cloudflare_access_token_id 
+	} = await request.json();
 
 	if (!name || !ip) {
 		return json({ message: 'Name and IP are required' }, { status: 400 });
@@ -43,7 +55,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		status: 'offline',
 		vpsProviderId,
 		privateKeyId,
-		companyId: assignedCompanyId
+		companyId: assignedCompanyId,
+		tags: tags || [],
+		cloudflareTunnelHostname: cloudflare_tunnel_hostname || null,
+		cloudflareAccessTokenId: cloudflare_access_token_id || null
 	});
 
 	return json({ data: server }, { status: 201 });

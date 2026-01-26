@@ -1,8 +1,49 @@
 import { db } from '../db/client';
-import { privateKeys } from '../db/schema';
+import { privateKeys, cloudflareAccessTokens } from '../db/schema';
 import { eq, and, or } from 'drizzle-orm';
 import type { NewPrivateKey } from '../db/schema';
 import { createPrivateKey as createCryptoKey } from 'node:crypto';
+
+/**
+ * Get all Cloudflare Access Tokens for a team
+ */
+export async function getCloudflareAccessTokensByTeam(teamId: string | null | undefined, isGod: boolean = false) {
+    if (isGod) {
+        return db
+            .select()
+            .from(cloudflareAccessTokens)
+            .orderBy(cloudflareAccessTokens.createdAt);
+    }
+
+    if (!teamId) return [];
+
+	return db
+		.select()
+		.from(cloudflareAccessTokens)
+		.where(
+            or(
+                eq(cloudflareAccessTokens.teamId, teamId),
+                and(eq(cloudflareAccessTokens.ownerType, 'team'), eq(cloudflareAccessTokens.ownerId, teamId))
+            )
+        )
+		.orderBy(cloudflareAccessTokens.createdAt);
+}
+
+/**
+ * Get Cloudflare Access Tokens by owner (polymorphic)
+ */
+export async function getCloudflareAccessTokensByOwner(ownerType: string, ownerId: string) {
+    return db
+        .select()
+        .from(cloudflareAccessTokens)
+        .where(
+            and(
+                eq(cloudflareAccessTokens.ownerType, ownerType),
+                eq(cloudflareAccessTokens.ownerId, ownerId)
+            )
+        )
+        .orderBy(cloudflareAccessTokens.createdAt);
+}
 
 /**
  * Helper to derive public key from private key
@@ -13,7 +54,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import ssh2 from 'ssh2';
-const { Client: SSH2Client, utils: sshutils } = ssh2;
+const { Client, utils: sshutils } = ssh2;
 import { getServerById, updateServer } from './servers';
 
 /**
@@ -239,7 +280,7 @@ export async function installPrivateKeyViaPassword({
 
     let privateKeyRecord;
     if (keyId) {
-        privateKeyRecord = await getPrivateKeyById(keyId, teamId, true); // Use isGod = true to ensure we find it
+        privateKeyRecord = await getPrivateKeyById(keyId, teamId ?? null, true); // Use isGod = true to ensure we find it
         if (!privateKeyRecord) throw new Error('Private key not found');
     } else {
         // Generate a new key if none provided
@@ -268,33 +309,163 @@ export async function installPrivateKeyViaPassword({
     const publicKey = ((privateKeyRecord as any).publicKey || derivePublicKey(privateKeyRecord.privateKey)) as string;
     if (!publicKey) throw new Error('Could not derive public key');
 
+    // Set up connection options (like testConnection does)
+    const conn = new Client();
+    
+    let connectOptions: any = {
+        username: server.user || 'root',
+        password: password,
+        readyTimeout: server.cloudflareTunnelHostname ? 10000 : 10000,
+        keepaliveInterval: 1000,
+        tryKeyboard: true
+    };
+
+    let proxy: any = undefined;
+
+    if (server.cloudflareTunnelHostname) {
+        // When using a socket (Cloudflare tunnel), don't set host/port
+        // The socket stream handles the connection
+        const { CloudflareAccessService } = await import('./cloudflare-access');
+        const { Duplex } = await import('node:stream');
+
+        console.log(`[SSH] Initializing Cloudflare Tunnel connection to ${server.cloudflareTunnelHostname}`);
+
+        proxy = await CloudflareAccessService.getSshProxyStream(
+            server.cloudflareTunnelHostname,
+            server.cloudflareAccessTokenId
+        );
+        
+        let cloudflaredErrors: string[] = [];
+        
+        const duplex = new Duplex({
+            read() {},
+            write(chunk, encoding, callback) { 
+                proxy.stdin.write(chunk, encoding, callback); 
+            }
+        });
+        
+        proxy.stdout.on('data', (c: Buffer) => duplex.push(c));
+        proxy.stdout.on('end', () => duplex.push(null));
+        
+        // Capture stderr from cloudflared for debugging and error reporting
+        if (proxy.stderr) {
+            proxy.stderr.on('data', (data: Buffer) => {
+                const errorMsg = data.toString();
+                cloudflaredErrors.push(errorMsg);
+                console.error(`[cloudflared stderr] ${errorMsg.trim()}`);
+            });
+        }
+        
+        proxy.proc.on('error', (e: Error) => {
+            const errorMsg = `cloudflared process error: ${e.message}`;
+            cloudflaredErrors.push(errorMsg);
+            console.error(`[cloudflared] Process error: ${e.message}`);
+            duplex.emit('error', e);
+        });
+        
+        proxy.proc.on('exit', (code: number, signal: string | null) => {
+            if (code !== 0) {
+                const errorMsg = `cloudflared exited with code ${code}${cloudflaredErrors.length > 0 ? ': ' + cloudflaredErrors.join(' ') : ''}`;
+                console.error(`[cloudflared] ${errorMsg}`);
+                duplex.emit('error', new Error(errorMsg));
+            }
+        });
+        
+        connectOptions.sock = duplex;
+    } else {
+        // Direct connection - set host and port
+        if (!server.ip) throw new Error('IP Address required for direct connection');
+        connectOptions.host = server.ip;
+        connectOptions.port = server.port || 22;
+    }
+
     return new Promise((resolve, reject) => {
-        const conn = new SSH2Client();
         let isDone = false;
+        let timeoutCleared = false;
+        let cloudflaredErrorTimeout: NodeJS.Timeout | null = null;
 
         const cleanup = (error?: Error) => {
+            if (cloudflaredErrorTimeout) clearTimeout(cloudflaredErrorTimeout);
             if (isDone) return;
             isDone = true;
             conn.end();
+            if (proxy) proxy.proc.kill();
             if (error) reject(error);
         };
 
+        // Set up cleanup handlers for proxy (like testConnection does)
+        if (proxy) {
+            conn.on('end', () => proxy.proc.kill());
+        }
+
+        // Set up error handler FIRST (before ready handlers)
+        conn.on('error', (err: Error) => {
+            console.error('[installPrivateKeyViaPassword] Connection error:', err.message);
+            if (isDone) return;
+            if (proxy) proxy.proc.kill();
+            cleanup(new Error(`Connection failed: ${err.message}`));
+        });
+
+        // Set up keyboard-interactive handler
+        conn.on('keyboard-interactive', (name, instructions, lang, prompts, finish) => {
+            console.log('[installPrivateKeyViaPassword] Keyboard-interactive prompt');
+            // Auto-respond with password for any prompt
+            if (prompts.length > 0) {
+                 finish([password]);
+            } else {
+                 finish([]);
+            }
+        });
+
+        // Set up the main ready handler that does the work
         conn.on('ready', () => {
+            console.log('[installPrivateKeyViaPassword] ===== CONNECTION READY EVENT FIRED =====');
+            
+            // Clear timeout if not already cleared
+            if (!timeoutCleared && cloudflaredErrorTimeout) {
+                timeoutCleared = true;
+                console.log('[installPrivateKeyViaPassword] Clearing timeout in ready handler...');
+                clearTimeout(cloudflaredErrorTimeout);
+            }
+
             // Use a safer way to append to authorized_keys that handles newlines
             const command = `mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && grep -qF "${publicKey}" ~/.ssh/authorized_keys || echo "${publicKey}" >> ~/.ssh/authorized_keys`;
+            console.log('[installPrivateKeyViaPassword] Executing key installation command...');
             
             conn.exec(command, (err, stream) => {
                 if (err) {
+                    console.error('[installPrivateKeyViaPassword] Exec error:', err);
                     return cleanup(err);
                 }
                 
+                console.log('[installPrivateKeyViaPassword] Key installation stream created');
+                
+                // CRITICAL: We must read from the stream or it will hang!
+                let output = '';
+                stream.on('data', (data: Buffer) => {
+                    const text = data.toString();
+                    output += text;
+                    console.log(`[installPrivateKeyViaPassword] Stream stdout: ${text.trim()}`);
+                });
+                
+                stream.stderr.on('data', (data: Buffer) => {
+                    const text = data.toString();
+                    console.error(`[installPrivateKeyViaPassword] Stream stderr: ${text.trim()}`);
+                });
+                
                 stream.on('close', async (code: number) => {
+                    console.log(`[installPrivateKeyViaPassword] Command exited with code ${code}`);
+                    if (output) console.log(`[installPrivateKeyViaPassword] Full output: ${output}`);
+                    
                     if (code === 0) {
                         try {
+                            console.log('[installPrivateKeyViaPassword] Updating server record with privateKeyId...');
                             const updated = await updateServer(serverId, teamId, { privateKeyId: privateKeyRecord.id });
                             
                             isDone = true;
                             conn.end();
+                            if (proxy) proxy.proc.kill();
+                            console.log('[installPrivateKeyViaPassword] Key installation completed successfully');
                             resolve({ 
                                 success: true, 
                                 message: 'Key installed successfully',
@@ -302,72 +473,32 @@ export async function installPrivateKeyViaPassword({
                                 keyId: privateKeyRecord.id // alias for backward compat if needed
                             });
                         } catch (updateErr) {
+                            console.error('[installPrivateKeyViaPassword] Update server error:', updateErr);
                             cleanup(updateErr instanceof Error ? updateErr : new Error(String(updateErr)));
                         }
                     } else {
-                        cleanup(new Error(`Failed to install key. Exit code: ${code}`));
+                        cleanup(new Error(`Failed to install key. Exit code: ${code}${output ? `. Output: ${output}` : ''}`));
                     }
                 });
             });
-        }).on('error', (err: Error) => {
-            cleanup(new Error(`Connection failed: ${err.message}`));
-        }).on('keyboard-interactive', (name, instructions, lang, prompts, finish) => {
-            // Auto-respond with password for any prompt
-            if (prompts.length > 0) {
-                 finish([password]);
-            } else {
-                 finish([]);
-            }
-        }).connect((() => {
-            const connectOptions: any = {
-                username: server.user || 'root',
-                password: password,
-                readyTimeout: 10000,
-                keepaliveInterval: 1000,
-                tryKeyboard: true
-            };
+        });
 
-            if (server.cloudflareTunnelHostname) {
-                connectOptions.sock = (async () => {
-                    const { CloudflareAccessService } = await import('./cloudflare-access');
-                    const { Duplex } = await import('node:stream');
+        // Set a timeout for tunnel connections (AFTER handlers are set up, like the test script)
+        if (server.cloudflareTunnelHostname) {
+            cloudflaredErrorTimeout = setTimeout(() => {
+                if (!isDone && !timeoutCleared) {
+                    console.error('[installPrivateKeyViaPassword] ===== CONNECTION TIMEOUT FIRED =====');
+                    console.error(`[installPrivateKeyViaPassword] timeoutCleared: ${timeoutCleared}`);
+                    console.error(`[installPrivateKeyViaPassword] isDone: ${isDone}`);
+                    isDone = true;
+                    conn.end();
+                    if (proxy) proxy.proc.kill();
+                    reject(new Error(`Connection timeout after 10 seconds. Verify that:\n1. The Cloudflare Access application for ${server.cloudflareTunnelHostname} is configured correctly\n2. The SSH service is running on port ${server.port || 22} behind the tunnel\n3. The tunnel is active and connected`));
+                }
+            }, 10000);
+        }
 
-                    const proxy = await CloudflareAccessService.getSshProxyStream(
-                        server.cloudflareTunnelHostname,
-                        server.cloudflareAccessTokenId
-                    );
-                    
-                    const duplex = new Duplex({
-                        read() {},
-                        write(chunk, encoding, callback) {
-                            proxy.stdin.write(chunk, encoding, callback);
-                        }
-                    });
-
-                    proxy.stdout.on('data', (chunk: Buffer) => duplex.push(chunk));
-                    proxy.stdout.on('end', () => duplex.push(null));
-                    proxy.proc.on('error', (err: Error) => duplex.emit('error', err));
-                    proxy.proc.on('exit', (code: number) => {
-                        if (code !== 0) duplex.emit('error', new Error(`cloudflared exited with code ${code}`));
-                    });
-
-                    conn.on('end', () => proxy.proc.kill());
-                    conn.on('error', () => proxy.proc.kill());
-
-                    return duplex;
-                })();
-            } else {
-                connectOptions.host = server.ip;
-                connectOptions.port = server.port || 22;
-            }
-            return connectOptions;
-        })());
-
-        // Global timeout as a safety net
-        setTimeout(() => {
-            if (!isDone) {
-                cleanup(new Error('Installation timed out after 20 seconds'));
-            }
-        }, 20000);
+        console.log('[installPrivateKeyViaPassword] Calling connect...');
+        conn.connect(connectOptions);
     });
 }

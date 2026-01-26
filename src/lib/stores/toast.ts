@@ -56,11 +56,17 @@ function createToastStore() {
 
 		/**
 		 * Show a loading toast
+		 * Returns the toast ID so it can be manually removed
 		 */
-		loading: (message: string, duration = 3000) => {
+		loading: (message: string, duration?: number) => {
 			const id = crypto.randomUUID();
-			update((toasts) => [...toasts, { id, type: 'loading', message, duration }]);
-			setTimeout(() => remove(id), duration);
+			// Don't auto-remove loading toasts - they should be manually removed
+			// If duration is provided, auto-remove after that time
+			update((toasts) => [...toasts, { id, type: 'loading', message, duration: duration || 0 }]);
+			if (duration && duration > 0) {
+				setTimeout(() => remove(id), duration);
+			}
+			return id;
 		},
 
 		/**

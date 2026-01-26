@@ -48,23 +48,31 @@ export const PATCH: RequestHandler = async ({ params, request, locals }) => {
 export const DELETE: RequestHandler = async ({ params, locals }) => {
 	await requireApiAuth(locals);
 	
-	// God users can delete servers, but still need a teamId for the delete
-	// For now, require team even for god users (they can create a team first)
-	if (!locals.team && !(await isGod(locals.user!.id))) {
+	const isGodUser = await isGod(locals.user!.id);
+	
+	// Non-god users require a team
+	if (!locals.team && !isGodUser) {
 		return json({ message: 'Team required for this operation' }, { status: 400 });
 	}
 
-	const teamId = locals.team?.id;
+	// God users can delete any server (teamId can be null)
+	// Regular users need a teamId
+	const teamId = isGodUser ? (locals.team?.id || null) : locals.team?.id;
 	
-	if (!teamId) {
+	if (!isGodUser && !teamId) {
 		return json({ message: 'Team ID is required' }, { status: 400 });
 	}
 
-	const server = await deleteServer(params.uuid, teamId);
+	try {
+		const server = await deleteServer(params.uuid, teamId);
 
-	if (!server) {
-		return json({ message: 'Server not found or deletion failed' }, { status: 404 });
+		if (!server) {
+			return json({ message: 'Server not found or deletion failed' }, { status: 404 });
+		}
+
+		return json({ data: { message: 'Server deleted successfully' } });
+	} catch (err: any) {
+		console.error('[API] Error deleting server:', err);
+		return json({ message: err.message || 'Failed to delete server' }, { status: 500 });
 	}
-
-	return json({ message: 'Server deleted successfully' });
 };

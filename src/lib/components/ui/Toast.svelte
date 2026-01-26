@@ -2,6 +2,7 @@
 	import { toastStore } from '$lib/stores/toast';
 	import { fly } from 'svelte/transition';
 
+
 	const icons = {
 		success: '✓',
 		error: '✕',
@@ -20,7 +21,7 @@
 	};
 </script>
 
-<div class="fixed top-4 right-4 z-50 space-y-2">
+<div class="fixed top-4 right-4 z-[100] space-y-2">
 	{#each $toastStore as toast (toast.id)}
 		<div
 			transition:fly={{ x: 300, duration: 300 }}

@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { executeCommand } from '$lib/server/services/ssh';
+import { isGod } from '$lib/server/auth/permissions';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request, params, locals }) => {
@@ -7,13 +8,11 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 		return json({ message: 'Unauthorized' }, { status: 401 });
 	}
 
-    // Try to get team ID from locals.team, or fallback to finding a team the user belongs to.
-    // Ideally, the hooks should populate locals.team based on session or user preference.
+	const userIsGod = await isGod(locals.user.id);
     let teamId = locals.team?.id;
 
-    // If locals.team is not set (e.g. strict session implementation), we might panic or try to get it from context.
-    // For now, allow it to fail if team is missing, as managing servers requires a team context.
-    if (!teamId) {
+    // Allow god users to execute commands without team context
+    if (!teamId && !userIsGod) {
          return json({ message: 'No active team found' }, { status: 400 });
     }
 
@@ -25,7 +24,7 @@ export const POST: RequestHandler = async ({ request, params, locals }) => {
 	}
 
 	try {
-		const result = await executeCommand(serverId, teamId, command);
+		const result = await executeCommand(serverId, teamId || null, command);
 		return json(result);
 	} catch (error: any) {
 		return json({ 
