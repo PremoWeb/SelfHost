@@ -2,7 +2,6 @@ ARG BUN_VERSION=latest
 FROM oven/bun:${BUN_VERSION} AS builder
 
 WORKDIR /app
-ENV NODE_ENV=production
 # Better Auth requires a URL during build for validation/prerendering
 ENV BETTER_AUTH_URL=http://localhost:3000
 ENV BETTER_AUTH_SECRET=placeholder_secret_for_build
@@ -16,6 +15,7 @@ COPY --link svelte.config.js tsconfig.json vite.config.ts agent-websocket-plugin
 COPY --link static/ ./static/
 COPY --link drizzle/ ./drizzle/
 
+RUN bun run prepare
 RUN bun --bun run build
 
 FROM oven/bun:${BUN_VERSION} AS runtime

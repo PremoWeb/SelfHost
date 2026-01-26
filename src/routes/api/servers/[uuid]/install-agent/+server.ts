@@ -6,7 +6,7 @@ import { isGod } from '$lib/server/auth/permissions';
 
 export const POST: RequestHandler = async ({ params, locals, request }) => {
 	const serverId = params.uuid;
-    const isGodUser = await isGod(locals.user?.id);
+	const isGodUser = locals.user ? await isGod(locals.user.id) : false;
 
 	if ((!locals.team && !isGodUser) || !serverId) {
 		return json({ message: 'Unauthorized' }, { status: 401 });

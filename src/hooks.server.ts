@@ -298,6 +298,7 @@ import { dev, building } from '$app/environment';
 import { startTunnel, stopTunnel } from '$lib/server/services/tunnel';
 import { initializeDatabase } from '$lib/server/db/init';
 import type { ServerInit } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 
 export const init: ServerInit = async () => {
 	// Initialize database first (migrations, schema setup, etc.)
@@ -316,7 +317,7 @@ export const init: ServerInit = async () => {
 	});
 
 	// Initialize development tunnel if in dev mode
-	if (dev && !process.env.SKIP_TUNNEL) {
+	if (dev && !env.SKIP_TUNNEL) {
 		// Auto-start tunnel in development
 		startTunnel().catch(() => {
 			// Silently fail - tunnel failures shouldn't break the app

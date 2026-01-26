@@ -1,4 +1,3 @@
-import { WebSocketServer } from 'ws';
 import type { Plugin } from 'vite';
 
 /**
@@ -7,8 +6,12 @@ import type { Plugin } from 'vite';
 export function agentWebSocketPlugin(): Plugin {
     return {
         name: 'agent-websocket',
-        configureServer(server) {
+        apply: 'serve',
+        async configureServer(server) {
             if (!server.httpServer) return;
+
+            // Dynamic import to avoid build-time issues
+            const { WebSocketServer } = await import('ws');
 
             const wss = new WebSocketServer({ 
                 noServer: true,
@@ -22,12 +25,10 @@ export function agentWebSocketPlugin(): Plugin {
                 const hasAgentHeaders = request.headers['x-selfhost-agent-id'] && request.headers['x-selfhost-agent-key'];
                 
                 if (pathname === '/api/agent' || hasAgentHeaders) {
-                    // console.log(`[WS-Plugin] Accepting WebSocket connection (path: ${pathname}, has agent headers: ${hasAgentHeaders})`);
                     wss.handleUpgrade(request, socket, head, (ws) => {
                         wss.emit('connection', ws, request);
                     });
                 }
-                // Silently ignore other upgrade requests (like Vite HMR) to avoid log spam
             });
 
             wss.on('connection', async (ws, request) => {
@@ -40,7 +41,7 @@ export function agentWebSocketPlugin(): Plugin {
                     return;
                 }
 
-                // Lazy load manager to avoid loading DB at config time (which causes env errors)
+                // Lazy load manager to avoid loading DB at config time
                 const { agentManager } = await import('./src/lib/server/agent/manager');
 
                 try {

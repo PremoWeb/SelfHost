@@ -7,7 +7,7 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
     await requireApiAuth(locals);
     await requireTeam(locals);
     
-    const server = await getServerById(params.uuid, locals.team.id);
+    const server = await getServerById(params.uuid, locals.team?.id);
     if (!server) return json({ message: 'Server not found' }, { status: 404 });
     
     if (server.connectionType !== 'agent') {

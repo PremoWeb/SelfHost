@@ -3,6 +3,8 @@ import { auth } from '$lib/server/auth/better-auth';
 import { logAction } from '$lib/server/services/action-logger';
 import type { Cookies } from '@sveltejs/kit';
 
+import { dev } from '$app/environment';
+
 /**
  * Parse Set-Cookie header and set cookie with all attributes
  */
@@ -18,7 +20,7 @@ function setCookieFromHeader(cookies: Cookies, cookieHeader: string) {
 		path: '/',
 		httpOnly: false,
 		sameSite: 'lax' as const,
-		secure: process.env.NODE_ENV === 'production'
+		secure: !dev
 	};
 	
 	for (let i = 1; i < parts.length; i++) {

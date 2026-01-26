@@ -2,6 +2,8 @@ import { json } from '@sveltejs/kit';
 import { login as loginUser } from '$lib/server/auth/session';
 import type { RequestHandler } from './$types';
 
+import { dev } from '$app/environment';
+
 export const POST: RequestHandler = async ({ request, cookies }) => {
 	const { email, password } = await request.json();
 
@@ -19,8 +21,8 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 	cookies.set('session', result.session.sessionId, {
 		path: '/',
 		httpOnly: true,
-		sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-		secure: process.env.NODE_ENV === 'production',
+		sameSite: !dev ? 'strict' : 'lax',
+		secure: !dev,
 		maxAge: 60 * 60 * 24 * 7 // 7 days
 	});
 

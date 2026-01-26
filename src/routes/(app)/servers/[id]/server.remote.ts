@@ -12,6 +12,7 @@ interface ActionResponse {
 	status?: string;
 	ready?: boolean;
 	checks?: Array<{ name: string; status: string; required: boolean; message: string }>;
+	data?: any;
 }
 
 export const diagnoseServer = command('unchecked', async ({ serverId }: { serverId: string }): Promise<ActionResponse> => {

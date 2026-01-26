@@ -67,6 +67,7 @@
 		Square,
 		Loader2,
 		CircleAlert,
+		CircleCheck,
 		CheckCircle2,
 		AlertCircle,
 		RefreshCw,
@@ -139,7 +140,10 @@
 	let isRestartingAgent = $state(false);
 	let isLoadingReverseDns = $state(false);
 	let isUpdatingReverseDns = $state(false);
-	let reverseDnsData = $state<{ ipv4s: Array<{ ip: string; reverse: string | null }>; ipv6s: Array<{ ip: string; reverse: string | null }> }>({
+	let reverseDnsData = $state<{
+		ipv4s: Array<{ ip: string; reverse: string | null }>;
+		ipv6s: Array<{ ip: string; reverse: string | null }>;
+	}>({
 		ipv4s: [],
 		ipv6s: []
 	});
@@ -405,7 +409,7 @@
 
 	async function handleRefreshReverseDns() {
 		if (!server.vpsProviderId || server.providerName !== 'Vultr') return;
-		
+
 		isLoadingReverseDns = true;
 		try {
 			const response = await fetch(`/api/servers/${server.id}/reverse-dns`);
@@ -428,7 +432,7 @@
 
 	async function handleUpdateReverseDns(type: 'ipv4' | 'ipv6', ip: string, reverseDns: string) {
 		if (!server.vpsProviderId || server.providerName !== 'Vultr') return;
-		
+
 		isUpdatingReverseDns = true;
 		try {
 			const response = await fetch(`/api/servers/${server.id}/reverse-dns`, {
@@ -436,7 +440,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ type, ip, reverseDns })
 			});
-			
+
 			if (response.ok) {
 				toastStore.success('Reverse DNS record updated successfully');
 				// Refresh the data
@@ -454,7 +458,7 @@
 
 	// Track active tab to load reverse DNS only when Advanced tab is accessed
 	let activeTab = $state('overview');
-	
+
 	$effect(() => {
 		if (activeTab === 'advanced' && server.vpsProviderId && server.providerName === 'Vultr') {
 			handleRefreshReverseDns();
@@ -586,7 +590,10 @@
 										}
 									}, 0);
 								} else if (data.step === 'complete') {
-									installProgress = installProgress.map((p) => ({ ...p, status: 'success' as const }));
+									installProgress = installProgress.map((p) => ({
+										...p,
+										status: 'success' as const
+									}));
 									server.connectionType = 'agent';
 
 									// Automatically force-update the service config to ensure it's correct
@@ -603,14 +610,18 @@
 									}
 
 									toastStore.success('SelfHost Agent installed successfully!');
-									
+
 									// Invalidate page data to refresh server status (will update from "waiting" to "online" when agent connects)
 									await invalidateAll();
 								} else if (data.step === 'error') {
-									const errorIndex = installProgress.findIndex((p) => p.status === 'in-progress' || p.status === 'pending');
+									const errorIndex = installProgress.findIndex(
+										(p) => p.status === 'in-progress' || p.status === 'pending'
+									);
 									if (errorIndex !== -1) {
-										installProgress = installProgress.map((p, i) => 
-											i === errorIndex ? { ...p, status: 'error' as const, message: data.message } : p
+										installProgress = installProgress.map((p, i) =>
+											i === errorIndex
+												? { ...p, status: 'error' as const, message: data.message }
+												: p
 										);
 									}
 									toastStore.error(data.message);
@@ -913,7 +924,7 @@
 	<PageTitle title={server.name} />
 
 	<div class="space-y-6">
-		<Tabs.Root value={activeTab} onValueChange={(value) => activeTab = value} class="space-y-6">
+		<Tabs.Root value={activeTab} onValueChange={(value) => (activeTab = value)} class="space-y-6">
 			<StickyHeader class="space-y-4">
 				<div class="flex flex-col gap-4 pb-6 md:flex-row md:items-center md:justify-between">
 					<div class="flex flex-col gap-1">
@@ -2722,7 +2733,8 @@
 						<div class="space-y-1">
 							<h2 class="text-xl font-bold tracking-tight">Advanced Settings</h2>
 							<p class="text-muted-foreground text-sm">
-								Manage reverse DNS (PTR) records for IPv4 and IPv6 addresses on Vultr-managed servers.
+								Manage reverse DNS (PTR) records for IPv4 and IPv6 addresses on Vultr-managed
+								servers.
 							</p>
 						</div>
 
@@ -2730,7 +2742,8 @@
 							<Card.Header>
 								<Card.Title>Reverse DNS (PTR) Records</Card.Title>
 								<Card.Description>
-									Set reverse DNS records for your server's IP addresses. This helps with email deliverability and server identification.
+									Set reverse DNS records for your server's IP addresses. This helps with email
+									deliverability and server identification.
 								</Card.Description>
 							</Card.Header>
 							<Card.Content class="space-y-6">
@@ -2762,7 +2775,8 @@
 														</div>
 														<Button
 															size="sm"
-															onclick={() => handleUpdateReverseDns('ipv4', ipv4.ip, ipv4.reverse || '')}
+															onclick={() =>
+																handleUpdateReverseDns('ipv4', ipv4.ip, ipv4.reverse || '')}
 															disabled={isUpdatingReverseDns}
 														>
 															{#if isUpdatingReverseDns}
@@ -2777,7 +2791,7 @@
 											</div>
 										{:else if isLoadingReverseDns}
 											<div class="flex items-center justify-center py-8">
-												<Loader2 class="size-6 animate-spin text-muted-foreground" />
+												<Loader2 class="text-muted-foreground size-6 animate-spin" />
 											</div>
 										{:else}
 											<p class="text-muted-foreground text-sm">No IPv4 addresses found</p>
@@ -2813,7 +2827,8 @@
 														</div>
 														<Button
 															size="sm"
-															onclick={() => handleUpdateReverseDns('ipv6', ipv6.ip, ipv6.reverse || '')}
+															onclick={() =>
+																handleUpdateReverseDns('ipv6', ipv6.ip, ipv6.reverse || '')}
 															disabled={isUpdatingReverseDns}
 														>
 															{#if isUpdatingReverseDns}
@@ -2828,7 +2843,7 @@
 											</div>
 										{:else if isLoadingReverseDns}
 											<div class="flex items-center justify-center py-8">
-												<Loader2 class="size-6 animate-spin text-muted-foreground" />
+												<Loader2 class="text-muted-foreground size-6 animate-spin" />
 											</div>
 										{:else}
 											<p class="text-muted-foreground text-sm">No IPv6 addresses found</p>
@@ -3118,7 +3133,7 @@
 			</div>
 
 			<Sheet.Footer class="mt-8">
-				<Sheet.Close asChild>
+				<Sheet.Close onclick={() => (showVpsUpdateSheet = false)}>
 					<Button variant="ghost">Cancel</Button>
 				</Sheet.Close>
 			</Sheet.Footer>

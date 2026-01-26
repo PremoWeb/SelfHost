@@ -158,7 +158,7 @@ export async function testConnection({
 	} else if (privateKeyId) {
         // If privateKeyId is provided, fetch it
         // Note: We might need to handle 'null' teamId if using god mode or personal checks
-        const privateKey = await getPrivateKeyById(privateKeyId || null, teamId || null, !teamId); // If no teamId, safely assume maybe God mode or check fails later
+        const privateKey = await getPrivateKeyById(privateKeyId, teamId || null, !teamId); // If no teamId, safely assume maybe God mode or check fails later
 		if (!privateKey) throw new Error('Private key not found');
 		connectOptions.privateKey = privateKey.privateKey;
 	} else {
@@ -170,7 +170,7 @@ export async function testConnection({
 		// The socket stream handles the connection
 		const proxy = await CloudflareAccessService.getSshProxyStream(
 			cloudflareTunnelHostname,
-			cloudflareAccessTokenId
+			cloudflareAccessTokenId ?? null
 		);
 		
 		let cloudflaredErrors: string[] = [];

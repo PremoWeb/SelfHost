@@ -8,10 +8,12 @@ import { gitRepositories, sshKeys, repositoryCollaborators } from '../db/git-sch
 import { eq, and, or } from 'drizzle-orm';
 import { createHash } from 'crypto';
 
+import { env } from '$env/dynamic/private';
+
 const execAsync = promisify(exec);
 
 // Base directory for storing git repositories
-const GIT_REPOS_ROOT = process.env.GIT_REPOS_ROOT || join(process.cwd(), 'data', 'git-repos');
+const GIT_REPOS_ROOT = env.GIT_REPOS_ROOT || join(process.cwd(), 'data', 'git-repos');
 
 // Ensure the root directory exists
 if (!existsSync(GIT_REPOS_ROOT)) {
@@ -139,7 +141,6 @@ export async function createRepository(data: {
 		description: description || null,
 		isPrivate,
 		repositoryPath,
-		defaultBranch,
 		...await getRepositoryInfo(repositoryPath)
 	}).returning();
 	

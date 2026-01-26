@@ -1,6 +1,6 @@
-import { json } from '@sveltejs/kit';
-import type { RequestHandler } from './$types';
+import { json, type RequestHandler } from '@sveltejs/kit';
 import { requireApiAuth, isGod } from '$lib/server/auth/permissions';
+import { dev } from '$app/environment';
 import { getUserById } from '$lib/server/auth/session';
 import { db } from '$lib/server/db/client';
 import { teams, companies, users } from '$lib/server/db/schema';
@@ -62,7 +62,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		path: '/',
 		httpOnly: true,
 		sameSite: 'lax',
-		secure: process.env.NODE_ENV === 'production',
+		secure: !dev,
 		maxAge: 60 * 60 * 24 // 24 hours
 	});
 
@@ -70,7 +70,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		path: '/',
 		httpOnly: true,
 		sameSite: 'lax',
-		secure: process.env.NODE_ENV === 'production',
+		secure: !dev,
 		maxAge: 60 * 60 * 24 // 24 hours
 	});
 
@@ -78,7 +78,7 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
 		path: '/',
 		httpOnly: true,
 		sameSite: 'lax',
-		secure: process.env.NODE_ENV === 'production',
+		secure: !dev,
 		maxAge: 60 * 60 * 24 // 24 hours
 	});
 

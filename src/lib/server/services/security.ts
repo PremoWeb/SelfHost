@@ -275,7 +275,7 @@ export async function installPrivateKeyViaPassword({
     password: string;
     keyId?: string;
     userId?: string;
-}) {
+}): Promise<{ success: boolean; message: string; privateKeyId: string; keyId: string }> {
     const server = await getServerById(serverId, teamId);
     if (!server) throw new Error('Server not found');
 
