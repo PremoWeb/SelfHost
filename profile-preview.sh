@@ -7,7 +7,8 @@ echo "=========================================="
 echo ""
 
 # Start preview in background
-BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-build-secret-dummy} bun preview &
+# Start production server directly (bypassing vite preview overhead)
+PORT=4173 BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-build-secret-dummy} bun --bun build/index.js &
 PREVIEW_PID=$!
 
 # Wait a moment for server to start
@@ -20,7 +21,7 @@ if ! kill -0 $PREVIEW_PID 2>/dev/null; then
 fi
 
 echo "✅ Preview server started (PID: $PREVIEW_PID)"
-echo "📊 Monitoring resource usage..."
+echo "📊 Monitoring resource usage (Process Tree)..."
 echo ""
 echo "Press Ctrl+C to stop monitoring and server"
 echo ""
@@ -29,6 +30,8 @@ echo ""
 cleanup() {
     echo ""
     echo "🛑 Stopping preview server..."
+    # Kill the whole process group
+    pkill -P $PREVIEW_PID 2>/dev/null
     kill $PREVIEW_PID 2>/dev/null
     wait $PREVIEW_PID 2>/dev/null
     exit 0
@@ -38,25 +41,34 @@ trap cleanup SIGINT SIGTERM
 
 # Monitor loop
 while kill -0 $PREVIEW_PID 2>/dev/null; do
-    # Get process stats
-    STATS=$(ps -p $PREVIEW_PID -o pid,%cpu,%mem,rss,vsz,etime --no-headers 2>/dev/null)
+    # Get all related PIDs (process tree)
+    # Get children PIDs
+    CHILD_PIDS=$(pgrep -P $PREVIEW_PID -d',' 2>/dev/null)
+    
+    if [ -n "$CHILD_PIDS" ]; then
+        ALL_PIDS="$PREVIEW_PID,$CHILD_PIDS"
+    else
+        ALL_PIDS="$PREVIEW_PID"
+    fi
+    
+    # Get stats for all PIDs
+    # Outputs: %cpu %mem rss vsz
+    STATS=$(ps -p "$ALL_PIDS" -o %cpu,%mem,rss,vsz --no-headers 2>/dev/null)
+    
+    # Get Uptime from main process
+    UPTIME=$(ps -p $PREVIEW_PID -o etime --no-headers 2>/dev/null)
     
     if [ -n "$STATS" ]; then
-        # Parse stats
-        PID=$(echo $STATS | awk '{print $1}')
-        CPU=$(echo $STATS | awk '{print $2}')
-        MEM=$(echo $STATS | awk '{print $3}')
-        RSS=$(echo $STATS | awk '{print $4}')
-        VSZ=$(echo $STATS | awk '{print $5}')
-        ETIME=$(echo $STATS | awk '{print $6}')
+        # Sum up stats using awk
+        read CPU MEM RSS VSZ <<< $(echo "$STATS" | awk '{cpu+=$1; mem+=$2; rss+=$3; vsz+=$4} END {print cpu, mem, rss, vsz}')
         
-        # Convert RSS from KB to MB
-        RSS_MB=$(echo "scale=2; $RSS / 1024" | bc)
-        VSZ_MB=$(echo "scale=2; $VSZ / 1024" | bc)
+        # Convert RSS/VSZ from KB to MB
+        RSS_MB=$(awk -v val="$RSS" 'BEGIN {printf "%.2f", val / 1024}')
+        VSZ_MB=$(awk -v val="$VSZ" 'BEGIN {printf "%.2f", val / 1024}')
         
         # Clear line and print stats
-        printf "\r⏱️  Uptime: %-8s | CPU: %5s%% | Memory: %5s%% | RSS: %8.1f MB | VSZ: %10.1f MB" \
-            "$ETIME" "$CPU" "$MEM" "$RSS_MB" "$VSZ_MB"
+        printf "\r⏱️  Uptime: %-8s | CPU: %5s%% | Memory: %5s%% | RSS: %8s MB | VSZ: %10s MB" \
+            "$UPTIME" "$CPU" "$MEM" "$RSS_MB" "$VSZ_MB"
     fi
     
     sleep 1

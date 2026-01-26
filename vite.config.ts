@@ -2,14 +2,18 @@ import tailwindcss from '@tailwindcss/vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
-// import { agentWebSocketPlugin } from './agent-websocket-plugin';
+import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig({
     plugins: [
         // agentWebSocketPlugin(),
         tailwindcss(),
         sveltekit(),
-        devtoolsJson()
+        devtoolsJson(),
+        visualizer({
+            emitFile: true,
+            filename: 'stats.html'
+        })
     ],
     // ... rest of config
 	resolve: {
