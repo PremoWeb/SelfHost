@@ -5,6 +5,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 # Better Auth requires a URL during build for validation/prerendering
 ENV BETTER_AUTH_URL=http://localhost:3000
+ENV BETTER_AUTH_SECRET=placeholder_secret_for_build
+ENV DATABASE_URL=file:local.db
 
 COPY --link package.json bun.lock* ./
 RUN bun install --ci
@@ -52,4 +54,4 @@ USER bun
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
     CMD bun /app/healthcheck.ts || exit 1
 
-CMD ["bun", "build/index.js"]
+CMD ["bun", "--bun", "build/index.js"]
