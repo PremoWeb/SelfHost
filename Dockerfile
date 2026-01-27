@@ -16,7 +16,7 @@ COPY --link static/ ./static/
 COPY --link drizzle/ ./drizzle/
 
 # Build the SvelteKit application
-RUN bun run build
+RUN bun run build && mkdir -p build/prerendered
 
 # Compile the adapter's production output into a single binary
 # This includes the server and asset handling logic

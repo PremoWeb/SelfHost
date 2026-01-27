@@ -1,9 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getRepositoryByProjectId } from '$lib/server/services/git';
-import { getRepositoryPath } from '$lib/server/services/git';
-import { exec } from 'child_process';
-// import { Readable } from 'stream';
+import { spawn } from 'node:child_process';
 
 /**
  * Git Smart HTTP Protocol - git-upload-pack endpoint (pull/clone)
@@ -28,7 +26,6 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const body = await request.arrayBuffer();
 		
 		// Execute git upload-pack
-		const { spawn } = await import('child_process');
 		const gitProcess = spawn('git', ['-C', repoPath, 'upload-pack', '--stateless-rpc', '.'], {
 			stdio: ['pipe', 'pipe', 'pipe']
 		});

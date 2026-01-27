@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { getRepositoryByNamespace, updateRepositoryStats } from '$lib/server/services/git';
 import { getUserTeams } from '$lib/server/auth/session';
 import { hasRepositoryAccess } from '$lib/server/services/git';
-import { spawn } from 'child_process';
+import { spawn } from 'node:child_process';
 
 /**
  * Git Smart HTTP Protocol - git-receive-pack endpoint (friendly namespace format)

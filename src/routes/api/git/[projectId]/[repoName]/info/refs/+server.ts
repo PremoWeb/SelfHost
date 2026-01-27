@@ -1,9 +1,9 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getRepositoryByProjectId } from '$lib/server/services/git';
-import { getRepositoryPath } from '$lib/server/services/git';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { getRepositoryByProjectId, hasRepositoryAccess } from '$lib/server/services/git';
+import { getUserTeams } from '$lib/server/auth/session';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
@@ -31,7 +31,7 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 	// git-receive-pack = write (push)
 	if (locals.user) {
 		const teams = await getUserTeams(locals.user.id);
-		const teamIds = teams.map(t => t.teamId);
+		const teamIds = (teams as any[]).map((t) => t.team.id);
 		const requiredPermission = service === 'git-upload-pack' ? 'read' : 'write';
 		const hasAccess = await hasRepositoryAccess(repository.id, locals.user.id, teamIds, requiredPermission);
 		

@@ -3,8 +3,8 @@ import type { RequestHandler } from './$types';
 import { getRepositoryByNamespace } from '$lib/server/services/git';
 import { getUserTeams } from '$lib/server/auth/session';
 import { hasRepositoryAccess } from '$lib/server/services/git';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
