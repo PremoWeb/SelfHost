@@ -1,12 +1,12 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { mkdir, access, stat } from 'fs/promises';
-import { existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdir, access, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { db } from '../db/client';
 import { gitRepositories, sshKeys, repositoryCollaborators } from '../db/git-schema';
 import { eq, and, or } from 'drizzle-orm';
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 
 import { env } from '$env/dynamic/private';
 

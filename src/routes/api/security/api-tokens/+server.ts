@@ -3,7 +3,7 @@ import { getApiTokensByTeam, createApiToken } from '$lib/server/services/api-tok
 import { requireApiAuth, isGod } from '$lib/server/auth/permissions';
 import { getDefaultCompanyForResource } from '$lib/server/services/companies';
 import type { RequestHandler } from './$types';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
 
 export const GET: RequestHandler = async ({ locals }) => {
 	await requireApiAuth(locals);

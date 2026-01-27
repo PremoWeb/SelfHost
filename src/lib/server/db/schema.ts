@@ -491,7 +491,6 @@ export const nameserverProfiles = sqliteTable('nameserver_profiles', {
 	updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`(unixepoch())`).notNull()
 });
 
-// Nameserver Profile Shares
 export const nameserverProfileShares = sqliteTable('nameserver_profile_shares', {
 	id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
 	profileId: text('profile_id').notNull().references(() => nameserverProfiles.id, { onDelete: 'cascade' }),
@@ -500,6 +499,18 @@ export const nameserverProfileShares = sqliteTable('nameserver_profile_shares', 
 	role: text('role').default('use').notNull(), // use, manage
 	createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`).notNull()
 });
+
+
+// Domain Shares table
+export const domainShares = sqliteTable('domain_shares', {
+	id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+	domainId: text('domain_id').notNull().references(() => domains.id, { onDelete: 'cascade' }),
+	assigneeType: text('assignee_type').notNull(), // user, team, company
+	assigneeId: text('assignee_id').notNull(),
+	role: text('role').default('use').notNull(), // use, manage
+	createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`).notNull()
+});
+
 
 
 // DNS Records table
@@ -722,8 +733,17 @@ export const domainsRelations = relations(domains, ({ one, many }) => ({
 		fields: [domains.nameserverProfileId],
 		references: [nameserverProfiles.id]
 	}),
-	dnsRecords: many(dnsRecords)
+	dnsRecords: many(dnsRecords),
+	shares: many(domainShares)
 }));
+
+export const domainSharesRelations = relations(domainShares, ({ one }) => ({
+	domain: one(domains, {
+		fields: [domainShares.domainId],
+		references: [domains.id]
+	})
+}));
+
 
 export const vpsTemplatesRelations = relations(vpsTemplates, ({ one }) => ({
 	team: one(teams, {

@@ -3,10 +3,11 @@ import devtoolsJson from 'vite-plugin-devtools-json';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 import { visualizer } from 'rollup-plugin-visualizer';
+import { agentWebSocketPlugin } from './agent-websocket-plugin';
 
 export default defineConfig({
     plugins: [
-        // agentWebSocketPlugin(),
+        agentWebSocketPlugin(),
         tailwindcss(),
         sveltekit(),
         devtoolsJson(),
@@ -15,18 +16,8 @@ export default defineConfig({
             filename: 'stats.html'
         })
     ].filter(Boolean),
-    // ... rest of config
 	resolve: {
-		dedupe: ['three'],
-        alias: {
-            'child_process': 'node:child_process',
-            'fs': 'node:fs',
-            'path': 'node:path',
-            'util': 'node:util',
-            'crypto': 'node:crypto',
-            'perf_hooks': 'node:perf_hooks',
-            'fs/promises': 'node:fs/promises',
-        }
+		dedupe: ['three']
 	},
 	server: {
 		host: false,
@@ -35,8 +26,17 @@ export default defineConfig({
 		allowedHosts: true
 	},
 	ssr: {
+		target: 'node',
 		noExternal: ['bits-ui'],
-        external: ['node:child_process', 'node:util', 'node:perf_hooks', 'node:fs/promises', 'node:fs', 'node:path', 'node:crypto', 'child_process', 'util', 'perf_hooks', 'fs/promises', 'fs', 'path', 'crypto']
+		external: [
+			'node:crypto',
+			'node:fs',
+			'node:path',
+			'node:util',
+			'node:child_process',
+			'node:perf_hooks',
+			'node:fs/promises'
+		]
 	},
     build: {
         rollupOptions: {

@@ -2,7 +2,7 @@ import { db } from '../db/client';
 import { users, sessions, teams, teamMembers, type User, type Team } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
+import { randomBytes } from 'node:crypto';
 
 export type AuthResponse =
 	| { success: true; user: User; session: { sessionId: string; expiresAt: Date }; team?: Team }

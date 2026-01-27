@@ -42,7 +42,7 @@ export function agentWebSocketPlugin(): Plugin {
                 }
 
                 // Lazy load manager to avoid loading DB at config time
-                const { agentManager } = await import('./src/lib/server/agent/manager');
+                const { agentManager } = await import(/* @vite-ignore */ './src/lib/server/agent/manager');
 
                 try {
                     const conn = await agentManager.register(ws as any, agentId, agentKey);

@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { db } from '$lib/server/db/client';
-import { domains, dnsRecords, nameserverProfiles, servers } from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
+import { domains, dnsRecords, nameserverProfiles, servers, domainShares, users, teams, companies } from '$lib/server/db/schema';
+import { eq, or } from 'drizzle-orm';
 import { createDomain, deleteDomain } from '$lib/server/services/domains';
 import { getVpsProvidersByTeam } from '$lib/server/services/vps/providers';
 import { VultrService } from '$lib/server/services/vps/vultr';
@@ -30,12 +30,21 @@ export const load: PageServerLoad = async ({ locals }) => {
     // Fetch domains: Filter by team if present, otherwise fetch all for God users
     // Note: In a real multi-tenant app, God users might still want a filter, but this matches the request "show us all domains available"
 	const domainsList = await db.query.domains.findMany({
-		where: teamId ? eq(domains.teamId, teamId) : undefined,
+		where: teamId ? or(eq(domains.teamId, teamId), eq(domains.ownerId, teamId)) : undefined,
 		with: {
-			nameserverProfile: true
+			nameserverProfile: true,
+			shares: true
 		},
 		orderBy: (domains, { asc }) => [asc(domains.name)]
 	});
+
+	// Fetch all potential assignees for the sharing modal
+	const [allUsersList, allTeamsList, allCompaniesList] = await Promise.all([
+		db.select({ id: users.id, name: users.name }).from(users),
+		db.select({ id: teams.id, name: teams.name }).from(teams),
+		db.select({ id: companies.id, name: companies.name }).from(companies)
+	]);
+
 
 	const profiles = await db.query.nameserverProfiles.findMany({
 		where: teamId ? eq(nameserverProfiles.teamId, teamId) : undefined,
@@ -73,7 +82,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 		vultrDomains,
 		vultrProvider,
 		servers: teamServers,
-		tags: allTags
+		tags: allTags,
+		allUsers: allUsersList,
+		allTeams: allTeamsList,
+		allCompanies: allCompaniesList
 	};
 };
 
@@ -292,5 +304,50 @@ export const actions = {
 			
 			return { success: false, error: errorMessage };
 		}
+	},
+
+	updateShares: async ({ request, locals }) => {
+		await requireAuth(locals);
+		const formData = await request.formData();
+		const domainId = formData.get('domainId') as string;
+		const sharesData = formData.get('shares') as string; // JSON array of { assigneeType, assigneeId, role }
+
+		if (!domainId) return { success: false, error: 'Missing domain ID' };
+
+		const parsedShares = JSON.parse(sharesData);
+
+		// Delete existing shares
+		await db.delete(domainShares).where(eq(domainShares.domainId, domainId));
+
+		// Insert new shares if any
+		if (parsedShares.length > 0) {
+			await db.insert(domainShares).values(
+				parsedShares.map((s: any) => ({
+					domainId,
+					assigneeType: s.assigneeType,
+					assigneeId: s.assigneeId,
+					role: s.role || 'use'
+				}))
+			);
+		}
+
+		return { success: true };
+	},
+
+	updateOwner: async ({ request, locals }) => {
+		await requireAuth(locals);
+		const formData = await request.formData();
+		const domainId = formData.get('domainId') as string;
+		const ownerType = formData.get('ownerType') as string;
+		const ownerId = formData.get('ownerId') as string;
+
+		if (!domainId) return { success: false, error: 'Missing domain ID' };
+
+		await db.update(domains)
+			.set({ ownerType, ownerId })
+			.where(eq(domains.id, domainId));
+
+		return { success: true };
 	}
 };
+
