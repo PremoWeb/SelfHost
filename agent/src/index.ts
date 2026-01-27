@@ -247,6 +247,10 @@ async function handleExecute(ws: WebSocket, msgId: string, command: string) {
         const proc = Bun.spawn(["/bin/sh", "-c", command], {
             stdout: "pipe",
             stderr: "pipe",
+            env: {
+                ...process.env,
+                TERM: "xterm-256color"
+            }
         });
 
         const stdout = await new Response(proc.stdout).text();

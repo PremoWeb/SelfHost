@@ -92,7 +92,8 @@ export async function executeCommand(
 
 	return new Promise<CommandResult>((resolve, reject) => {
 		conn.on('ready', () => {
-			conn.exec(command, (err, stream) => {
+			const wrappedCommand = `export TERM=xterm-256color; ${command}`;
+			conn.exec(wrappedCommand, (err, stream) => {
 				if (err) {
 					conn.end();
 					return reject(err);

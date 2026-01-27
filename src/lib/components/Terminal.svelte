@@ -8,23 +8,23 @@
 	let term: any;
 	let fitAddon: any;
 
-    interface Props {
-        streamId?: string;
-        serverName?: string;
-        serverIp?: string;
-        serverId?: string;
-    }
-    
-    let { streamId, serverName, serverIp, serverId }: Props = $props();
-    
-    let currentLine = '';
-    // Use serverId prop if provided, otherwise fall back to page params
-    const serverIdToUse = $derived(serverId || $page.params.id);
+	interface Props {
+		streamId?: string;
+		serverName?: string;
+		serverIp?: string;
+		serverId?: string;
+	}
+
+	let { streamId, serverName, serverIp, serverId }: Props = $props();
+
+	let currentLine = '';
+	// Use serverId prop if provided, otherwise fall back to page params
+	const serverIdToUse = $derived(serverId || $page.params.id);
 
 	onMount(() => {
 		if (!browser) return;
 
-        let mounted = true;
+		let mounted = true;
 		let resizeObserver: ResizeObserver;
 		const handleResize = () => fitAddon?.fit();
 
@@ -35,7 +35,7 @@
 				import('@xterm/addon-fit')
 			]);
 
-            if (!mounted) return;
+			if (!mounted) return;
 
 			// Import CSS
 			await import('@xterm/xterm/css/xterm.css');
@@ -65,7 +65,7 @@
 				term.writeln('\x1b[1;32mWelcome to PremoHost Terminal\x1b[0m');
 			}
 			term.writeln('Type a command and press Enter...');
-			
+
 			if (streamId) {
 				// Log stream mode (read-only)
 				term.writeln(`Connecting to stream: ${streamId}...`);
@@ -74,22 +74,28 @@
 				// Interactive Shell Mode (Pseudo)
 				term.write('\r\n$ ');
 
-				term.onKey(({ key, domEvent }: any) => {
-					const printable = !domEvent.altKey && !domEvent.ctrlKey && !domEvent.metaKey;
-
-					if (domEvent.keyCode === 13) { // Enter
-						term.write('\r\n');
-						execute(currentLine);
-						currentLine = '';
-					} else if (domEvent.keyCode === 8) { // Backspace
+				term.onData((data: string) => {
+					// Handle backspace (ASCII 127 or 8)
+					if (data === '\x7f' || data === '\b') {
 						if (currentLine.length > 0) {
 							term.write('\b \b');
 							currentLine = currentLine.slice(0, -1);
 						}
-					} else if (printable) {
-						currentLine += key;
-						term.write(key);
+						return;
 					}
+
+					// Handle enter (ASCII 13)
+					if (data === '\r' || data === '\n') {
+						term.write('\r\n');
+						execute(currentLine);
+						currentLine = '';
+						return;
+					}
+
+					// Handle paste or normal typing
+					// Simple implementation: just append and echo
+					currentLine += data;
+					term.write(data);
 				});
 			}
 
@@ -108,39 +114,38 @@
 		init();
 
 		return () => {
-            mounted = false;
+			mounted = false;
 			if (resizeObserver) resizeObserver.disconnect();
 			window.removeEventListener('resize', handleResize);
 			if (term) term.dispose();
 		};
 	});
 
-    async function execute(command: string) {
-        if (!command.trim()) {
-            term.write('$ ');
-            return;
-        }
-        
-        try {
-            const response = await api.post(`/servers/${serverIdToUse}/execute`, { command }) as any;
-            const data = response.data;
-            
-            if (data.stdout) {
-                // Determine if output has newlines, if so print comfortably
-                // xterm handles \\n well if convertEol is true.
-                // We might need to handle line endings.
-                const lines = data.stdout.split('\n');
-                lines.forEach((line: string) => term.writeln(line));
-            }
-            if (data.stderr) {
-                term.writeln(`\x1b[1;31m${data.stderr}\x1b[0m`);
-            }
-        } catch (error: any) {
-             term.writeln(`\x1b[1;31mError: ${error.response?.data?.message || 'Command failed'}\x1b[0m`);
-        }
-        
-        term.write('$ ');
-    }
+	async function execute(command: string) {
+		if (!command.trim()) {
+			term.write('$ ');
+			return;
+		}
+
+		try {
+			const response = (await api.post(`/servers/${serverIdToUse}/execute`, { command })) as any;
+			const data = response.data;
+
+			if (data.stdout) {
+				term.write(data.stdout);
+			}
+			if (data.stderr) {
+				term.writeln(`\x1b[1;31m${data.stderr}\x1b[0m`);
+			}
+		} catch (error: any) {
+			term.writeln(`\x1b[1;31mError: ${error.response?.data?.message || 'Command failed'}\x1b[0m`);
+		}
+
+		term.write('$ ');
+	}
 </script>
 
-<div class="h-full w-full min-h-[600px] bg-[#0F0F0F] rounded-lg overflow-hidden pl-2 pt-2" bind:this={terminalContainer}></div>
+<div
+	class="h-full min-h-[600px] w-full overflow-hidden rounded-lg bg-[#0F0F0F] pt-2 pl-2"
+	bind:this={terminalContainer}
+></div>
