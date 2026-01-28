@@ -3000,7 +3000,12 @@
 	<Dialog.Root bind:open={isTerminalOpen}>
 		<Dialog.Content class="h-[80vh] min-w-[800px] overflow-hidden border-0 p-0">
 			<div class="h-full w-full bg-black p-2 text-white">
-				<Terminal serverName={server.name} serverIp={server.ip} serverId={server.id} />
+				<Terminal
+					serverName={server.name}
+					serverIp={server.ip}
+					serverId={server.id}
+					onClose={() => (isTerminalOpen = false)}
+				/>
 			</div>
 		</Dialog.Content>
 	</Dialog.Root>

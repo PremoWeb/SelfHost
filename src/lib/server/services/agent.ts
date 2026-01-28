@@ -354,7 +354,6 @@ done
 												await execCommand(enableCmd);
 
 												conn.end();
-												onProgress?.('complete', 'SelfHost Agent is now active!');
 												await updateServer(serverId, teamId, { connectionType: 'agent', status: 'waiting' });
 												resolve({ success: true, message: 'SelfHost Agent installed', agentKey });
 

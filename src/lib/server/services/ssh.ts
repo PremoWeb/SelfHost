@@ -18,7 +18,9 @@ interface CommandResult {
 export async function executeCommand(
 	serverId: string, 
 	teamId: string | null, 
-	command: string
+	command: string,
+	onData?: (data: string) => void,
+	signal?: AbortSignal
 ): Promise<CommandResult> {
 	const server = await getServerById(serverId, teamId);
 	
@@ -93,7 +95,7 @@ export async function executeCommand(
 	return new Promise<CommandResult>((resolve, reject) => {
 		conn.on('ready', () => {
 			const wrappedCommand = `export TERM=xterm-256color; ${command}`;
-			conn.exec(wrappedCommand, (err, stream) => {
+			conn.exec(wrappedCommand, { pty: true }, (err, stream) => {
 				if (err) {
 					conn.end();
 					return reject(err);
@@ -102,7 +104,21 @@ export async function executeCommand(
 				let stdout = '';
 				let stderr = '';
 
+				// Set a timeout for interactive commands that don't exit (like top without -b)
+				const timeout = setTimeout(() => {
+					stream.end();
+					conn.end();
+					resolve({ 
+						success: true, 
+						stdout, 
+						stderr,
+						code: null,
+						signal: 'SIGKILL'
+					});
+				}, 60000); // 60 second timeout for streaming
+
 				stream.on('close', (code: any, signal: any) => {
+					clearTimeout(timeout);
 					conn.end();
 					resolve({ 
 						success: code === 0, 
@@ -112,10 +128,30 @@ export async function executeCommand(
 						signal
 					});
 				}).on('data', (data: any) => {
-					stdout += data;
+					const chunk = data.toString();
+					stdout += chunk;
+					if (onData) onData(chunk);
 				}).stderr.on('data', (data: any) => {
-					stderr += data;
+					const chunk = data.toString();
+					stderr += chunk;
+					if (onData) onData(chunk);
 				});
+
+				// Handle abort signal
+				if (signal) {
+					signal.addEventListener('abort', () => {
+						clearTimeout(timeout);
+						stream.end();
+						conn.end();
+						resolve({
+							success: false,
+							stdout,
+							stderr,
+							code: null,
+							signal: 'SIGINT' // Manual interrupt
+						});
+					});
+				}
 			});
 		}).on('error', (err) => {
 			reject(new Error(`Connection failed: ${err.message}`));

@@ -29,8 +29,6 @@ export class CloudflareAccessService {
             }
         }
 
-        console.log(`Starting cloudflared [VERSION 2 - SSH] with args: ${args.join(' ')}`);
-        console.log(`Using cloudflared binary at: ${cloudflaredBin}`);
         
         // Inherit environment variables (important for HOME, etc)
         const proc = spawn(cloudflaredBin, args, {

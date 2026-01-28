@@ -23,7 +23,32 @@ export default defineConfig({
 		host: false,
 		port: 5173,
 		strictPort: true,
-		allowedHosts: true
+		allowedHosts: true,
+		preTransformRequests: false, // Don't crawl the whole app on start
+		watch: {
+			ignored: [
+				'**/data/**', 
+				'**/*.db', 
+				'**/*.db-journal', 
+				'**/*.db-shm', 
+				'**/*.db-wal',
+				'**/node_modules/**',
+				'**/.git/**',
+				'**/build/**',
+				'**/.svelte-kit/**'
+			]
+		}
+	},
+	optimizeDeps: {
+		include: [
+			'three',
+			'three-globe',
+			'lucide-svelte',
+			'axios',
+			'clsx',
+			'tailwind-merge',
+			'bits-ui'
+		]
 	},
 	ssr: {
 		target: 'node',

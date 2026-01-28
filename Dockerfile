@@ -4,8 +4,8 @@ FROM oven/bun:${BUN_VERSION} AS builder
 WORKDIR /app
 # Better Auth requires a URL during build for validation/prerendering
 ENV BETTER_AUTH_URL=http://localhost:3000
-ENV BETTER_AUTH_SECRET=placeholder_secret_for_build
-ENV DATABASE_URL=file:local.db
+ENV BETTER_AUTH_SECRET=build_placeholder
+ENV DATABASE_URL=file:./build.db
 
 COPY --link package.json bun.lock* ./
 RUN bun install --ci
@@ -29,8 +29,9 @@ WORKDIR /app
 # Non-interactive shell for some operations
 ENV DEBIAN_FRONTEND=noninteractive
 # Better Auth environment variables
-ENV BETTER_AUTH_URL=http://localhost:3000
-ENV BETTER_AUTH_SECRET=changeme_in_production
+# These should be provided at runtime via -e or .env file
+ENV BETTER_AUTH_URL=
+ENV BETTER_AUTH_SECRET=
 ENV NODE_ENV=production
 
 # Set Git repositories root to use volume mount

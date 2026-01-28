@@ -1,6 +1,6 @@
 import { db } from '../db/client';
-import { users, sessions, teams, teamMembers, type User, type Team } from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { users, sessions, accounts, teams, teamMembers, type User, type Team } from '../db/schema';
+import { eq, and } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { randomBytes } from 'node:crypto';
 
@@ -41,8 +41,9 @@ export async function createSession(userId: string, teamId?: string) {
 
 	await db.insert(sessions).values({
 		id: sessionId,
+		token: sessionId,
 		userId,
-		teamId,
+		activeTeamId: teamId,
 		expiresAt
 	});
 
@@ -94,7 +95,17 @@ export async function login(email: string, password: string): Promise<AuthRespon
 		return { success: false, error: 'Invalid credentials' };
 	}
 
-	const valid = await verifyPassword(password, user.password);
+	const [account] = await db
+		.select()
+		.from(accounts)
+		.where(and(eq(accounts.userId, user.id), eq(accounts.providerId, 'credential')))
+		.limit(1);
+
+	if (!account || !account.password) {
+		return { success: false, error: 'Invalid credentials' };
+	}
+
+	const valid = await verifyPassword(password, account.password);
 
 	if (!valid) {
 		return { success: false, error: 'Invalid credentials' };
@@ -130,10 +141,17 @@ export async function register(name: string, email: string, password: string): P
 		.insert(users)
 		.values({
 			name,
-			email,
-			password: hashedPassword
+			email
 		})
 		.returning();
+
+	// Create account
+	await db.insert(accounts).values({
+		userId: user.id,
+		accountId: email,
+		providerId: 'credential',
+		password: hashedPassword
+	});
 
 	// Create personal team
 	const [team] = await db

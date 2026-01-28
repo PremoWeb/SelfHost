@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { api } from '$lib/api/client';
 	import { browser } from '$app/environment';
+	import '@xterm/xterm/css/xterm.css';
 
 	let terminalContainer: HTMLDivElement;
 	let term: any;
@@ -13,9 +14,10 @@
 		serverName?: string;
 		serverIp?: string;
 		serverId?: string;
+		onClose?: () => void;
 	}
 
-	let { streamId, serverName, serverIp, serverId }: Props = $props();
+	let { streamId, serverName, serverIp, serverId, onClose }: Props = $props();
 
 	let currentLine = '';
 	// Use serverId prop if provided, otherwise fall back to page params
@@ -37,16 +39,16 @@
 
 			if (!mounted) return;
 
-			// Import CSS
-			await import('@xterm/xterm/css/xterm.css');
-
 			term = new Terminal({
 				cursorBlink: true,
+				cursorStyle: 'block',
+				cursorInactiveStyle: 'outline',
 				convertEol: true,
 				theme: {
 					background: '#0F0F0F',
 					foreground: '#ffffff',
-					cursor: '#ffffff'
+					cursor: '#ffffff',
+					cursorAccent: '#0F0F0F'
 				},
 				fontFamily: 'Menlo, Monaco, "Courier New", monospace',
 				fontSize: 14,
@@ -58,6 +60,7 @@
 			term.loadAddon(fitAddon);
 			term.open(terminalContainer);
 			fitAddon.fit();
+			term.focus();
 
 			if (serverName && serverIp) {
 				term.writeln(`\x1b[1;32mConnected to ${serverName} (${serverIp})\x1b[0m`);
@@ -75,6 +78,18 @@
 				term.write('\r\n$ ');
 
 				term.onData((data: string) => {
+					// Handle Ctrl+C (ASCII 3)
+					if (data === '\x03') {
+						if (activeAbortController) {
+							activeAbortController.abort();
+							term.write('^C\r\n');
+						} else {
+							term.write('^C\r\n$ ');
+						}
+						currentLine = '';
+						return;
+					}
+
 					// Handle backspace (ASCII 127 or 8)
 					if (data === '\x7f' || data === '\b') {
 						if (currentLine.length > 0) {
@@ -121,27 +136,63 @@
 		};
 	});
 
+	let activeAbortController: AbortController | null = null;
+
 	async function execute(command: string) {
-		if (!command.trim()) {
+		const trimmed = command.trim();
+		if (!trimmed) {
 			term.write('$ ');
 			return;
 		}
 
-		try {
-			const response = (await api.post(`/servers/${serverIdToUse}/execute`, { command })) as any;
-			const data = response.data;
+		if (trimmed === 'exit') {
+			onClose?.();
+			return;
+		}
 
-			if (data.stdout) {
-				term.write(data.stdout);
+		if (trimmed === 'clear') {
+			term.clear();
+			term.write('$ ');
+			return;
+		}
+
+		activeAbortController = new AbortController();
+
+		try {
+			const response = await fetch(`/api/servers/${serverIdToUse}/execute?stream=true`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ command }),
+				signal: activeAbortController.signal
+			});
+
+			if (!response.body) {
+				term.writeln(`\x1b[1;31mError: No response from server\x1b[0m`);
+				term.write('$ ');
+				return;
 			}
-			if (data.stderr) {
-				term.writeln(`\x1b[1;31m${data.stderr}\x1b[0m`);
+
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				term.write(decoder.decode(value));
 			}
 		} catch (error: any) {
-			term.writeln(`\x1b[1;31mError: ${error.response?.data?.message || 'Command failed'}\x1b[0m`);
+			if (error.name === 'AbortError') {
+				// Don't show redundant error for manual abort handled in onData
+			} else {
+				term.writeln(`\x1b[1;31mError: ${error.message || 'Command failed'}\x1b[0m`);
+			}
+		} finally {
+			activeAbortController = null;
+			currentLine = '';
 		}
 
 		term.write('$ ');
+		term.focus();
 	}
 </script>
 

@@ -244,7 +244,12 @@ async function handleExecute(ws: WebSocket, msgId: string, command: string) {
     console.log(`💻 Executing: ${command}`);
     
     try {
-        const proc = Bun.spawn(["/bin/sh", "-c", command], {
+        // Use 'script' to provide a pseudo-terminal so tools like 'top' don't fail.
+        // If 'script' is missing, fallback to raw shell execution.
+        const escapedCommand = command.replace(/"/g, '\\"');
+        const ttyCommand = `if command -v script >/dev/null 2>&1; then script -q -c "${escapedCommand}" /dev/null; else /bin/sh -c "${escapedCommand}"; fi`;
+        
+        const proc = Bun.spawn(["/bin/sh", "-c", ttyCommand], {
             stdout: "pipe",
             stderr: "pipe",
             env: {
@@ -253,9 +258,15 @@ async function handleExecute(ws: WebSocket, msgId: string, command: string) {
             }
         });
 
+        // Add a timeout for the process
+        const timeout = setTimeout(() => {
+            proc.kill();
+        }, 10000);
+
         const stdout = await new Response(proc.stdout).text();
         const stderr = await new Response(proc.stderr).text();
         const exitCode = await proc.exited;
+        clearTimeout(timeout);
 
         ws.send(JSON.stringify({
             type: "execute_result",

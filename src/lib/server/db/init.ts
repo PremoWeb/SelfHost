@@ -30,53 +30,53 @@ export async function initializeDatabase(): Promise<void> {
 
 	// Start initialization
 	initializationPromise = (async () => {
+		const start = performance.now();
 		try {
 			console.log('🔄 Database initialization started...');
 			// Quick connectivity check
+			const connStart = performance.now();
 			await client.execute('SELECT 1');
-			console.log('✅ Database connectivity verified.');
-
+			console.log(`✅ Database connectivity verified in ${(performance.now() - connStart).toFixed(2)}ms.`);
 			// Check if migrations table exists
+			const migTableStart = performance.now();
 			const migrationsTableExists = await checkMigrationsTable();
-			console.log(`📊 Migrations table exists: ${migrationsTableExists}`);
-
+			console.log(`📊 Migrations table checked in ${(performance.now() - migTableStart).toFixed(2)}ms (Exists: ${migrationsTableExists})`);
 			if (!migrationsTableExists) {
 				console.log('🔨 Creating migrations table...');
 				await createMigrationsTable();
 			}
-
 			// Get applied migrations (fast query)
+			const appliedMigStart = performance.now();
 			const appliedMigrations = await getAppliedMigrations();
-			console.log(`📂 Found ${appliedMigrations.size} applied migrations.`);
-
+			console.log(`📂 Found ${appliedMigrations.size} applied migrations in ${(performance.now() - appliedMigStart).toFixed(2)}ms.`);
 			// Get all migration files (cached after first read)
+			const migFileStart = performance.now();
 			const migrationFiles = await getMigrationFiles();
-			console.log(`📁 Found ${migrationFiles.length} migration files in folder.`);
-
+			console.log(`📁 Found ${migrationFiles.length} migration files in folder in ${(performance.now() - migFileStart).toFixed(2)}ms.`);
 			if (migrationFiles.length === 0) {
 				console.log('ℹ️ No migration files found, skipping.');
 				isInitialized = true;
 				return;
 			}
-
 			// Filter out already applied migrations
 			const pendingMigrations = migrationFiles.filter(
 				(migration) => !appliedMigrations.has(migration.name)
 			);
 			console.log(`🚀 ${pendingMigrations.length} pending migrations to apply.`);
-
 			if (pendingMigrations.length === 0) {
 				isInitialized = true;
+				const total = performance.now() - start;
+				console.log(`✨ Database initialization completed (no pending migrations) in ${total.toFixed(2)}ms.`);
 				return;
 			}
-
 			// Apply pending migrations
+			const applyStart = performance.now();
 			for (const migration of pendingMigrations) {
 				console.log(`📝 Applying migration: ${migration.name}`);
 				await applyMigration(migration);
 			}
-
-			console.log('✨ Database initialization completed successfully.');
+			const total = performance.now() - start;
+			console.log(`✨ Database initialization completed successfully in ${total.toFixed(2)}ms (Applied ${pendingMigrations.length} migrations in ${(performance.now() - applyStart).toFixed(2)}ms).`);
 			isInitialized = true;
 		} catch (error) {
 			console.error('❌ Database initialization failed:', error);
