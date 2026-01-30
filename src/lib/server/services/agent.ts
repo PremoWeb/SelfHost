@@ -5,7 +5,6 @@ import { getInstanceSettings } from './settings';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { env } from '$env/dynamic/private';
 
 export type InstallStep = 'connecting' | 'detecting' | 'uploading' | 'installing_bun' | 'starting' | 'complete';
 
@@ -83,8 +82,8 @@ export async function installAgent(
 				if (settings?.fqdn) {
 					serverUrl = settings.fqdn.startsWith('http') ? settings.fqdn.replace(/^http/, 'ws') : `ws://${settings.fqdn}`;
 					if (!serverUrl.includes(':', 6)) serverUrl += ':5173';
-				} else if (env.SELFHOST_FQDN) {
-					serverUrl = `ws://${env.SELFHOST_FQDN}:5173`;
+				} else if (process.env.SELFHOST_FQDN) {
+					serverUrl = `ws://${process.env.SELFHOST_FQDN}:5173`;
 				}
 			}
 

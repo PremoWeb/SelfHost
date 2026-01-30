@@ -4,7 +4,7 @@ import { admin } from 'better-auth/plugins';
 import { db } from '../db/client';
 import * as schema from '../db/schema';
 import { getEnforcer } from './casbin';
-import { count, eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import { isGod } from './permissions';
 
 export const auth = betterAuth({
@@ -42,10 +42,6 @@ export const auth = betterAuth({
 									const body = await clone.json();
 									const user = body.user;
 									if (user) {
-										// Check if this is the first user
-										const [userCount] = await db.select({ count: count() }).from(schema.users);
-										const isFirstUser = userCount.count === 1;
-
 										// Create a personal team for the new user
 										// Check if user already has a team (shouldn't happen on sign-up, but be safe)
 										const existingTeams = await db.query.teamMembers.findMany({
@@ -70,19 +66,31 @@ export const auth = betterAuth({
 											});
 										}
 
-										// Assign god role and super_admin role to first user
-										if (isFirstUser) {
-											
-											// Set isGod flag in database
-											await db.update(schema.users).set({ isGod: true }).where(eq(schema.users.id, user.id));
-											
-											const e = await getEnforcer();
-											// Assign god role: g(user_id, "god")
-											await e.addGroupingPolicy(user.id, 'god');
-											// Assign super_admin role: g(user_id, "super_admin")
-											await e.addGroupingPolicy(user.id, 'super_admin');
-											// Save the policy to persist it
-											await e.savePolicy();
+										// Assign God to the actual first user (by createdAt), not by count-at-hook-time.
+										// This avoids giving God to the second signup when the first user isn't committed yet.
+										const hasAnyGod = await db
+											.select({ id: schema.users.id })
+											.from(schema.users)
+											.where(eq(schema.users.isGod, true))
+											.limit(1);
+										if (hasAnyGod.length === 0) {
+											// No God yet: make the earliest-created user God (true first user)
+											const firstUser = await db
+												.select({ id: schema.users.id })
+												.from(schema.users)
+												.orderBy(asc(schema.users.createdAt))
+												.limit(1);
+											if (firstUser.length > 0) {
+												const godUserId = firstUser[0].id;
+												await db
+													.update(schema.users)
+													.set({ isGod: true })
+													.where(eq(schema.users.id, godUserId));
+												const e = await getEnforcer();
+												await e.addGroupingPolicy(godUserId, 'god');
+												await e.addGroupingPolicy(godUserId, 'super_admin');
+												await e.savePolicy();
+											}
 										}
 									}
 								} catch (e) {

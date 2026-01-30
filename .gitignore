@@ -26,6 +26,8 @@ psysh_history
 .env.*
 !.env.example
 !.env.test
+.dev-install-agent.log
+.zig-server.log
 
 # Build and Output
 .output

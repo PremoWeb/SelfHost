@@ -124,7 +124,9 @@ const authContextMiddleware: Handle = async ({ event, resolve }) => {
 			event.locals.team = team;
 			event.locals.activeCompanyId = null;
 		} else {
-			event.locals.team = await getUserCurrentTeam(userId, null);
+			// No active team in session: god users get team=null (see all servers); others get default team
+			const isGodUser = await isGod(userId);
+			event.locals.team = isGodUser ? null : await getUserCurrentTeam(userId, null);
 			event.locals.activeCompanyId = null;
 		}
 	}

@@ -3,7 +3,7 @@
 	import { enhance } from '$app/forms';
 	import { goto, invalidateAll } from '$app/navigation';
 	import ContextSwitcher from './ContextSwitcher.svelte';
-	import type { Team } from '$lib/server/db/schema';
+	import type { Team } from '$lib/types';
 	import { api } from '$lib/api/client';
 	import { toastStore } from '$lib/stores/toast';
 	import {
@@ -76,8 +76,10 @@
 		stopImpersonating
 	}: Props = $props();
 
+	// Always show context switcher when sidebar is visible (user is logged in)
+	// so users can switch team/company, see "God mode", or "No team"
 	const shouldShowContextSwitcher = $derived(
-		isGod || teams.length > 0 || companies.length > 0 || isImpersonating || isSuperAdmin
+		true
 	);
 
 	let isTogglingWebsiteMode = $state(false);
@@ -207,7 +209,7 @@
 	</div>
 
 	{#if shouldShowContextSwitcher}
-		<div class="border-b p-4">
+		<div class="border-b p-4 min-h-[52px] flex flex-col justify-center">
 			<ContextSwitcher
 				{currentTeam}
 				{activeCompany}

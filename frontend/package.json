@@ -1,0 +1,37 @@
+{
+	"name": "selfhost-frontend-zig",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"description": "Zig+Svelte frontend — Svelte UI extracted from SvelteKit, talks to Zig API",
+	"scripts": {
+		"dev": "ZIG_BACKEND=true vite dev",
+		"build": "vite build",
+		"build:zig": "BUILD_TO_ZIG=1 vite build",
+		"preview": "vite preview",
+		"sync": "bash ../scripts/sync-frontend-from-sveltekit.sh",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-static": "^3.0.10",
+		"@sveltejs/kit": "^2.50.1",
+		"@sveltejs/vite-plugin-svelte": "^6.2.4",
+		"@tailwindcss/vite": "^4.1.18",
+		"lucide-svelte": "^0.562.0",
+		"svelte": "^5.48.5",
+		"svelte-check": "^4.3.5",
+		"tailwindcss": "^4.1.18",
+		"typescript": "^5.9.3",
+		"vite": "^7.3.1"
+	},
+	"dependencies": {
+		"@tanstack/svelte-query": "^5.90.2",
+		"axios": "^1.13.4",
+		"better-auth": "^1.4.17",
+		"bits-ui": "^2.15.4",
+		"clsx": "^2.1.1",
+		"mode-watcher": "^1.1.0",
+		"sveltekit-view-transition": "^0.5.3",
+		"tailwind-merge": "^3.4.0"
+	}
+}

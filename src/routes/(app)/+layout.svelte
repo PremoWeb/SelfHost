@@ -52,7 +52,7 @@
 				toastStore.error('Stop impersonating function not available');
 				return;
 			}
-			const result = await stopImpersonating({} as any);
+			const result = await stopImpersonating();
 			if (!result.success) {
 				toastStore.error(result.message || 'Failed to stop impersonating');
 				return;
@@ -127,7 +127,7 @@
 
 	{#if data?.user}
 		{@const sidebarData = data as any}
-		<Sidebar bind:sidebarOpen currentTeam={data.team} activeCompany={layoutData.activeCompany} teams={data.teams} companies={layoutData.companies || []} users={layoutData.users || []} isSuperAdmin={sidebarData.isSuperAdmin || false} isGod={sidebarData.isGod || false} isImpersonating={sidebarData.isImpersonating || false} impersonationType={sidebarData.impersonationType || layoutData.impersonationType} websiteMode={sidebarData.websiteMode || false} {switchTeam} {switchCompany} impersonateUser={impersonateUser} stopImpersonating={async () => await stopImpersonating({} as any)} />
+		<Sidebar bind:sidebarOpen currentTeam={data.team} activeCompany={layoutData.activeCompany} teams={data.teams} companies={layoutData.companies || []} users={layoutData.users || []} isSuperAdmin={sidebarData.isSuperAdmin || false} isGod={sidebarData.isGod || false} isImpersonating={sidebarData.isImpersonating || false} impersonationType={sidebarData.impersonationType || layoutData.impersonationType} websiteMode={sidebarData.websiteMode || false} {switchTeam} {switchCompany} impersonateUser={impersonateUser} stopImpersonating={async () => await stopImpersonating()} />
 	{/if}
 
 	<main class:pl-64={!!data?.user} class:pt-14={shouldShowBanner && !!data?.user}>

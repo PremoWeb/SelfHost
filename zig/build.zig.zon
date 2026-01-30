@@ -1,0 +1,12 @@
+.{
+    .name = .selfhost_server,
+    .version = "0.1.0",
+    .fingerprint = 0x8e575dca20d00c5f,
+    .paths = .{""},
+    .dependencies = .{
+        .zap = .{
+            .url = "https://github.com/zigzap/zap/archive/refs/heads/master.tar.gz",
+            .hash = "zap-0.10.6-GoeB8w-EJABTkxyoGH_Z8oMBYMxTBvn7YWk-DrJOHuDO",
+        },
+    },
+}

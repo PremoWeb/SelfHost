@@ -145,6 +145,17 @@ export interface Destination {
 	updated_at: string;
 }
 
+export interface EnvironmentVariable {
+	id: string;
+	key: string;
+	value: string;
+	isBuildTime: boolean;
+	isPreview: boolean;
+	applicationId: string | null;
+	createdAt: Date;
+	updatedAt: Date;
+}
+
 // API Response types
 export interface ApiResponse<T> {
 	data: T;

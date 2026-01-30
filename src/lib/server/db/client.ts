@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import path from 'node:path';
 import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
 import * as schema from './schema';
@@ -27,7 +28,16 @@ if (process.env.DATABASE_AUTH_TOKEN) {
 	env.DATABASE_AUTH_TOKEN = process.env.DATABASE_AUTH_TOKEN;
 }
 
-const DATABASE_URL = env.DATABASE_URL || 'file:sqlite.db';
+// @libsql/client expects a URI (e.g. file:///path or http(s)://). Normalize bare paths to file: URI
+function normalizeDatabaseUrl(raw: string): string {
+	if (!raw) return 'file:sqlite.db';
+	if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return raw; // already has scheme
+	const absolute = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(process.cwd(), raw);
+	// file:///absolute/path (three slashes for absolute)
+	return 'file:' + (absolute.startsWith('/') ? '//' + absolute : absolute);
+}
+
+const DATABASE_URL = normalizeDatabaseUrl(env.DATABASE_URL || 'sqlite.db');
 const AUTH_TOKEN = env.DATABASE_AUTH_TOKEN;
 
 // Debug log to help identify connection issues (only in dev)

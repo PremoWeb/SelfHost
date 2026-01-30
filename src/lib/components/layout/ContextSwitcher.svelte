@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { invalidateAll, goto } from '$app/navigation';
-	import type { Team } from '$lib/server/db/schema';
+	import type { Team } from '$lib/types';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import { ChevronsUpDown, Check, Users, Shield, Building2, User, Crown, UserCheck } from '@lucide/svelte';
@@ -186,6 +186,10 @@
 	</DropdownMenu.Trigger>
 	<DropdownMenu.Content class="w-[280px] max-h-[400px] overflow-y-auto">
 		{#if isGod}
+			<p class="text-muted-foreground px-2 py-1.5 text-xs">
+				Switch your view: select a team, company, or user to act as.
+			</p>
+			<DropdownMenu.Separator />
 			<DropdownMenu.Label>
 				<div class="flex items-center gap-2">
 					<Crown class="size-4 text-primary" />
@@ -208,17 +212,17 @@
 			<DropdownMenu.Separator />
 		{/if}
 
+		<DropdownMenu.Label>
+			<div class="flex items-center gap-2">
+				<Users class="size-4" />
+				<span>Teams</span>
+				{#if isGod}
+					<span class="text-xs text-muted-foreground">({teams.length})</span>
+				{/if}
+			</div>
+		</DropdownMenu.Label>
+		<DropdownMenu.Separator />
 		{#if teams.length > 0}
-			<DropdownMenu.Label>
-				<div class="flex items-center gap-2">
-					<Users class="size-4" />
-					<span>Teams</span>
-					{#if isGod}
-						<span class="text-xs text-muted-foreground">({teams.length})</span>
-					{/if}
-				</div>
-			</DropdownMenu.Label>
-			<DropdownMenu.Separator />
 			{#each teams as team}
 				<DropdownMenu.Item
 					onclick={() => handleSwitchTeam(team.id)}
@@ -251,8 +255,15 @@
 					</div>
 				</DropdownMenu.Item>
 			{/each}
-			<DropdownMenu.Separator />
+		{:else}
+			<DropdownMenu.Item disabled class="text-muted-foreground">
+				<div class="flex items-center gap-2">
+					<Users class="size-3.5 text-muted-foreground shrink-0" />
+					<span class="text-sm">No teams yet</span>
+				</div>
+			</DropdownMenu.Item>
 		{/if}
+		<DropdownMenu.Separator />
 
 		{#if isGod}
 			<DropdownMenu.Label>
@@ -309,7 +320,7 @@
 			<DropdownMenu.Separator />
 		{/if}
 
-		{#if isGod && users.length > 0}
+		{#if isGod}
 			<DropdownMenu.Label>
 				<div class="flex items-center gap-2">
 					<User class="size-4" />
@@ -318,21 +329,30 @@
 				</div>
 			</DropdownMenu.Label>
 			<DropdownMenu.Separator />
-			{#each users as user}
-				<DropdownMenu.Item
-					onclick={() => handleImpersonate('user', user.id)}
-					class="flex cursor-pointer items-center justify-between group"
-				>
-					<div class="flex items-center gap-2 truncate flex-1">
+			{#if users.length > 0}
+				{#each users as user}
+					<DropdownMenu.Item
+						onclick={() => handleImpersonate('user', user.id)}
+						class="flex cursor-pointer items-center justify-between group"
+					>
+						<div class="flex items-center gap-2 truncate flex-1">
+							<User class="size-3.5 text-muted-foreground shrink-0" />
+							<span class="truncate">{user.name || user.email}</span>
+							{#if user.isGod}
+								<Crown class="size-3 text-primary shrink-0" />
+							{/if}
+						</div>
+						<UserCheck class="size-4 shrink-0 opacity-50" />
+					</DropdownMenu.Item>
+				{/each}
+			{:else}
+				<DropdownMenu.Item disabled class="text-muted-foreground">
+					<div class="flex items-center gap-2">
 						<User class="size-3.5 text-muted-foreground shrink-0" />
-						<span class="truncate">{user.name || user.email}</span>
-						{#if user.isGod}
-							<Crown class="size-3 text-primary shrink-0" />
-						{/if}
+						<span class="text-sm">No users</span>
 					</div>
-					<UserCheck class="size-4 shrink-0 opacity-50" />
 				</DropdownMenu.Item>
-			{/each}
+			{/if}
 			<DropdownMenu.Separator />
 		{/if}
 

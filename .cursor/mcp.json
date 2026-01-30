@@ -12,6 +12,10 @@
         "mcp-remote",
         "https://shadcn-svelte.mastra.cloud/api/mcp/shadcn/mcp"
       ]
+    },
+    "zig-docs": {
+      "command": "bun",
+      "args": ["x", "-y", "zig-mcp@latest"]
     }
   }
 }

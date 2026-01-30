@@ -25,6 +25,18 @@ export default defineConfig({
 		strictPort: true,
 		allowedHosts: true,
 		preTransformRequests: false, // Don't crawl the whole app on start
+		// Proxy API/WS to Zig backend when ZIG_BACKEND=true (Zig default port 3000)
+		proxy: process.env.ZIG_BACKEND === 'true' ? {
+			'/api': {
+				target: 'http://localhost:3000',
+				changeOrigin: true,
+				rewrite: (path) => path,
+			},
+			'/ws': {
+				target: 'ws://localhost:3000',
+				ws: true,
+			},
+		} : undefined,
 		watch: {
 			ignored: [
 				'**/data/**', 
