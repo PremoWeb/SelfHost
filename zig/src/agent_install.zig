@@ -363,7 +363,7 @@ pub fn runInstallAgent(
 
     const service_path = if (std.mem.eql(u8, init_system, "systemd")) "/etc/systemd/system/selfhost-agent.service" else "/etc/init.d/selfhost-agent";
     const enable_cmd = if (std.mem.eql(u8, init_system, "systemd"))
-        try std.fmt.allocPrint(allocator, "{s}systemctl daemon-reload && {s}systemctl enable selfhost-agent && {s}systemctl restart selfhost-agent", .{ sudo_prefix, sudo_prefix, sudo_prefix })
+        try std.fmt.allocPrint(allocator, "{s}rm -f /etc/init.d/selfhost-agent && {s}systemctl daemon-reload && {s}systemctl enable selfhost-agent && {s}systemctl restart selfhost-agent", .{ sudo_prefix, sudo_prefix, sudo_prefix, sudo_prefix })
     else
         try std.fmt.allocPrint(allocator, "{s}chmod +x /etc/init.d/selfhost-agent && {s}rc-update add selfhost-agent default && {s}rc-service selfhost-agent restart", .{ sudo_prefix, sudo_prefix, sudo_prefix });
     defer allocator.free(enable_cmd);
@@ -398,8 +398,8 @@ pub fn runInstallAgent(
         \\{s}rm -f /var/log/selfhost-agent.log /tmp/selfhost-agent-wrapper.log || true
         \\{s}
         \\{s}pkill -f start.sh || true
-        \\echo '{s}' | base64 -d | {s}tee /var/lib/selfhost/start.sh >/dev/null && {s}chmod +x /var/lib/selfhost/start.sh
-        \\echo '{s}' | base64 -d | {s}tee {s} >/dev/null
+        \\echo '{s}' | base64 -d | {s}tee /var/lib/selfhost/start.sh > /dev/null && {s}chmod +x /var/lib/selfhost/start.sh
+        \\echo '{s}' | base64 -d | {s}tee {s} > /dev/null && {s}chmod 644 {s}
         \\{s}
         \\
     ,
@@ -413,6 +413,8 @@ pub fn runInstallAgent(
             sudo_prefix,
             sudo_prefix,
             service_b64_esc,
+            sudo_prefix,
+            service_path,
             sudo_prefix,
             service_path,
             enable_cmd,
