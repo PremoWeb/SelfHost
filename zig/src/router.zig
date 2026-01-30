@@ -177,6 +177,11 @@ pub fn handleWebSocketOpen(context: ?*websocket.WsContext, handle: zap.WebSocket
     };
 }
 
+pub fn handleWebSocketReady(context: ?*websocket.WsContext, handle: zap.WebSockets.WsHandle) anyerror!void {
+    _ = context;
+    _ = handle;
+}
+
 pub fn handleWebSocketMessage(context: ?*websocket.WsContext, handle: zap.WebSockets.WsHandle, message: []const u8, is_text: bool) anyerror!void {
     _ = context;
     _ = is_text;

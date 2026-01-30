@@ -4,7 +4,15 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 
-const SERVER_URL = process.env.SELFHOST_SERVER_URL || "ws://localhost:5173/api/agent";
+let rawUrl = process.env.SELFHOST_SERVER_URL || "ws://localhost:5173/api/agent";
+if (rawUrl.startsWith("http://")) rawUrl = rawUrl.replace("http://", "ws://");
+if (rawUrl.startsWith("https://")) rawUrl = rawUrl.replace("https://", "wss://");
+const SERVER_URL = rawUrl;
+
+console.log(`[Agent] Starting up...`);
+console.log(`[Agent] Connect Target: ${SERVER_URL}`);
+console.log(`[Agent] Agent ID: ${process.env.SELFHOST_AGENT_ID || "unknown"}`);
+
 const AGENT_ID = process.env.SELFHOST_AGENT_ID || "local-agent";
 const AGENT_KEY = process.env.SELFHOST_AGENT_KEY || "development-key";
 const RESTART_COMMAND = process.env.SELFHOST_RESTART_COMMAND;

@@ -362,6 +362,8 @@ pub fn runInstallAgent(
     const service_b64_len = b64_enc.encode(service_b64, service_content);
 
     const service_path = if (std.mem.eql(u8, init_system, "systemd")) "/etc/systemd/system/selfhost-agent.service" else "/etc/init.d/selfhost-agent";
+    const service_mode = if (std.mem.eql(u8, init_system, "systemd")) "644" else "755";
+
     const enable_cmd = if (std.mem.eql(u8, init_system, "systemd"))
         try std.fmt.allocPrint(allocator, "{s}rm -f /etc/init.d/selfhost-agent && {s}systemctl daemon-reload && {s}systemctl enable selfhost-agent && {s}systemctl restart selfhost-agent", .{ sudo_prefix, sudo_prefix, sudo_prefix, sudo_prefix })
     else
@@ -393,14 +395,19 @@ pub fn runInstallAgent(
     defer remote_script.deinit(allocator);
     try remote_script.writer(allocator).print(
         \\set -e
+        \\echo "STEP: Cleaning up..."
         \\{s}pkill -f agent.ts || true
         \\{s}pkill -f start.sh || true
         \\{s}rm -f /var/log/selfhost-agent.log /tmp/selfhost-agent-wrapper.log || true
         \\{s}
         \\{s}pkill -f start.sh || true
+        \\echo "STEP: Writing start script..."
         \\echo '{s}' | base64 -d | {s}tee /var/lib/selfhost/start.sh > /dev/null && {s}chmod +x /var/lib/selfhost/start.sh
-        \\echo '{s}' | base64 -d | {s}tee {s} > /dev/null && {s}chmod 644 {s}
+        \\echo "STEP: Writing service file..."
+        \\echo '{s}' | base64 -d | {s}tee {s} > /dev/null && {s}chmod {s} {s}
+        \\echo "STEP: Enabling service..."
         \\{s}
+        \\echo "STEP: Done."
         \\
     ,
         .{
@@ -416,6 +423,7 @@ pub fn runInstallAgent(
             sudo_prefix,
             service_path,
             sudo_prefix,
+            service_mode,
             service_path,
             enable_cmd,
         },
@@ -472,52 +480,117 @@ pub fn runInstallAgent(
     stdin.close();
     ssh_child.stdin = null;
 
+    var install_stdout = std.ArrayList(u8).initCapacity(allocator, 4096) catch return false;
+    defer install_stdout.deinit(allocator);
     var install_stderr = std.ArrayList(u8).initCapacity(allocator, 4096) catch return false;
-    defer install_stderr.deinit(allocator);
+    defer install_stderr.deinit(allocator); // Note: ArrayList.deinit takes allocator? No, Managed ArrayList deinit() takes nothing if it stores allocator. But here we might need to check if it stores it.
 
-    if (ssh_child.stderr) |se| {
-        var err_buf: [4096]u8 = undefined;
-        var n: usize = 0;
-        while (n < err_buf.len) {
-            const r = se.read(err_buf[n..]) catch break;
-            if (r == 0) break;
-            n += r;
-        }
-        if (n > 0) {
-            install_stderr.appendSlice(allocator, err_buf[0..n]) catch {};
-            log.debug("ssh stderr: {s}", .{err_buf[0..n]});
-        }
-    }
-
-    const install_term = ssh_child.wait() catch |err| {
-        log.err("ssh install wait: {any}", .{err});
-        try appendSse(allocator, sse_out, "error", "Install script failed", "error");
+    // Collect output (this waits for process to exit)
+    ssh_child.collectOutput(allocator, &install_stdout, &install_stderr, 50 * 1024) catch |err| {
+        log.err("ssh collectOutput error: {any}", .{err});
+        try appendSse(allocator, sse_out, "error", "Failed to capture install output", "error");
         return false;
     };
-    switch (install_term) {
-        .Exited => |code| if (code != 0) {
-            const stderr_raw = std.mem.trim(u8, install_stderr.items, &std.ascii.whitespace);
-            log.err("Remote install script failed with code {d}. stderr: {s}", .{ code, stderr_raw });
+    log.info("Install STDOUT: {s}", .{install_stdout.items});
 
-            const stderr_safe = sanitizeStderrForDisplay(allocator, stderr_raw, 500) catch "Install script failed";
-            defer if (stderr_safe.ptr != "Install script failed".ptr) allocator.free(stderr_safe);
+    const term_result = ssh_child.term;
+    const install_term = if (term_result) |t| t catch |err| {
+        log.err("ssh child term error: {any}", .{err});
+        try appendSse(allocator, sse_out, "error", "Install process finished with error", "error");
+        return false;
+    } else null;
 
-            const msg = if (stderr_safe.len > 0 and !std.mem.eql(u8, stderr_safe, ""))
-                try std.fmt.allocPrint(allocator, "Remote install script failed: {s}", .{stderr_safe})
-            else
-                try allocator.dupe(u8, "Remote install script failed (no error details)");
-            defer allocator.free(msg);
+    if (install_term) |term| {
+        switch (term) {
+            .Exited => |code| if (code != 0) {
+                // Error handling logic (keep existing)
+                const stderr_raw = std.mem.trim(u8, install_stderr.items, &std.ascii.whitespace);
+                log.err("Remote install script failed with code {d}. stderr: {s}", .{ code, stderr_raw });
 
-            try appendSse(allocator, sse_out, "error", msg, "error");
+                const stderr_safe = sanitizeStderrForDisplay(allocator, stderr_raw, 500) catch "Install script failed";
+                defer if (stderr_safe.ptr != "Install script failed".ptr) allocator.free(stderr_safe);
+
+                const msg = if (stderr_safe.len > 0 and !std.mem.eql(u8, stderr_safe, ""))
+                    try std.fmt.allocPrint(allocator, "Remote install script failed: {s}", .{stderr_safe})
+                else
+                    try allocator.dupe(u8, "Remote install script failed (no error details)");
+                defer allocator.free(msg);
+
+                try appendSse(allocator, sse_out, "error", msg, "error");
+                return false;
+            },
+            else => {
+                try appendSse(allocator, sse_out, "error", "Install failed (signal/stopped)", "error");
+                return false;
+            },
+        }
+    } else {
+        // Term is null - check stdout for success marker
+        if (std.mem.indexOf(u8, install_stdout.items, "STEP: Done.") != null) {
+            log.info("Install process term is null, but found success marker. Proceeding.", .{});
+        } else {
+            log.err("ssh child term is null and no success marker found", .{});
+            try appendSse(allocator, sse_out, "error", "Install process state unknown (no success marker)", "error");
             return false;
-        },
-        else => {
-            try appendSse(allocator, sse_out, "error", "Install failed", "error");
-            return false;
-        },
+        }
     }
 
-    try appendSse(allocator, sse_out, "complete", "SelfHost Agent installed", "complete");
+    try appendSse(allocator, sse_out, "info", "Agent installed, verifying connection...", "info");
+
+    // Wait a moment for service to start
+    std.Thread.sleep(2 * std.time.ns_per_s);
+
+    // Verify service is running and check connection status
+    const verify_cmd = if (std.mem.eql(u8, init_system, "systemd"))
+        "systemctl is-active selfhost-agent && tail -20 /var/log/selfhost-agent.log | grep -E '(Connected|Connection failed|Starting)' || echo 'Service not running'"
+    else
+        "rc-service selfhost-agent status && tail -20 /var/log/selfhost-agent.log | grep -E '(Connected|Connection failed|Starting)' || echo 'Service not running'";
+
+    var verify_args = std.ArrayList([]const u8).initCapacity(allocator, 10) catch return false;
+    defer verify_args.deinit(allocator);
+    try verify_args.append(allocator, "ssh");
+    try verify_args.append(allocator, "-i");
+    try verify_args.append(allocator, key_path_no_null);
+    try verify_args.append(allocator, "-o");
+    try verify_args.append(allocator, "StrictHostKeyChecking=no");
+    try verify_args.append(allocator, "-o");
+    try verify_args.append(allocator, "UserKnownHostsFile=/dev/null");
+    try verify_args.append(allocator, "-o");
+    try verify_args.append(allocator, "LogLevel=ERROR");
+    if (use_cloudflare) {
+        try verify_args.append(allocator, "-o");
+        try verify_args.append(allocator, "ProxyCommand=cloudflared access ssh --hostname %h");
+    }
+    try verify_args.append(allocator, target);
+    try verify_args.append(allocator, verify_cmd);
+
+    const verify_result = std.process.Child.run(.{
+        .allocator = allocator,
+        .argv = verify_args.items,
+        .max_output_bytes = 1024 * 1024,
+    }) catch |err| {
+        log.warn("Failed to verify agent status: {any}", .{err});
+        try appendSse(allocator, sse_out, "complete", "Agent installed (verification failed)", "complete");
+        return true;
+    };
+    defer allocator.free(verify_result.stdout);
+    defer allocator.free(verify_result.stderr);
+
+    const verify_output = std.mem.trim(u8, verify_result.stdout, &std.ascii.whitespace);
+    log.info("Agent verification output: {s}", .{verify_output});
+
+    if (std.mem.indexOf(u8, verify_output, "active") != null or std.mem.indexOf(u8, verify_output, "started") != null) {
+        if (std.mem.indexOf(u8, verify_output, "Connected") != null or std.mem.indexOf(u8, verify_output, "✅") != null) {
+            try appendSse(allocator, sse_out, "complete", "Agent installed and connected successfully!", "complete");
+        } else if (std.mem.indexOf(u8, verify_output, "Connection failed") != null or std.mem.indexOf(u8, verify_output, "❌") != null) {
+            try appendSse(allocator, sse_out, "warning", "Agent installed but connection failed - check logs", "warning");
+        } else {
+            try appendSse(allocator, sse_out, "complete", "Agent installed and running", "complete");
+        }
+    } else {
+        try appendSse(allocator, sse_out, "warning", "Agent installed but service not running", "warning");
+    }
+
     return true;
 }
 

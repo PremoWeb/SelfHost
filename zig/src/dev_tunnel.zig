@@ -36,7 +36,7 @@ pub fn start(allocator: std.mem.Allocator, timeout_ms: u32) ![]const u8 {
     }
 
     const target = std.process.getEnvVarOwned(allocator, "TUNNEL_TARGET_URL") catch blk: {
-        break :blk allocator.dupe(u8, "http://localhost:5173") catch return error.OutOfMemory;
+        break :blk allocator.dupe(u8, "http://localhost:3000") catch return error.OutOfMemory;
     };
     defer allocator.free(target);
 

@@ -8,6 +8,7 @@ const router = @import("router.zig");
 const realtime = @import("db/realtime.zig");
 const websocket = @import("websocket.zig");
 const dev_tunnel = @import("dev_tunnel.zig");
+const api = @import("api.zig");
 
 const log = std.log.scoped(.main);
 
@@ -51,6 +52,9 @@ pub fn main() !void {
 
     // Set router context
     router.setContext(&db, allocator);
+
+    // Initialize API settings
+    api.init(allocator);
 
     // Static files: co-located zig/frontend/ (HTML + assets) or Svelte build dirs.
     const static_dir = std.process.getEnvVarOwned(allocator, "STATIC_DIR") catch |err| blk: {

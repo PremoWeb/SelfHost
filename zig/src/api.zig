@@ -24,12 +24,28 @@ const dev_tunnel = @import("dev_tunnel.zig");
 
 const log = std.log.scoped(.api);
 
+var agent_ws_settings: zap.WebSockets.Handler(websocket.WsContext).WebSocketSettings = undefined;
+
+pub fn init(allocator: std.mem.Allocator) void {
+    _ = allocator;
+    agent_ws_settings = .{
+        .on_open = router.handleWebSocketOpen,
+        .on_ready = router.handleWebSocketReady,
+        .on_message = router.handleWebSocketMessage,
+        .on_close = router.handleWebSocketClose,
+        .context = null, // Set per-upgrade
+    };
+}
+
 /// WebSocket upgrade for agents
 pub fn handleAgentWebSocketUpgrade(r: zap.Request) void {
     const allocator = router.getAllocator() orelse return;
     const db = router.getDatabase() orelse return;
 
     // Check headers
+    const host_debug = r.getHeader("host") orelse "unknown";
+    log.info("DEBUG: handleAgentWebSocketUpgrade called. host={s}", .{host_debug});
+
     const agent_id = r.getHeader("x-selfhost-agent-id") orelse {
         r.setStatus(.unauthorized);
         r.sendBody("Missing agent id") catch {};
@@ -42,6 +58,10 @@ pub fn handleAgentWebSocketUpgrade(r: zap.Request) void {
     };
 
     // Authenticate
+    const host = r.getHeader("host") orelse "unknown";
+    const upgrade = r.getHeader("upgrade") orelse "none";
+    const conn = r.getHeader("connection") orelse "none";
+    log.info("Agent WS upgrade attempt: host={s}, upgrade={s}, connection={s}, agent_id={s}", .{ host, upgrade, conn, agent_id });
     var server_opt = servers_service.getServerById(allocator, @ptrCast(db), agent_id, null) catch |err| {
         log.err("Failed to get server for agent upgrade: {any}", .{err});
         r.setStatus(.internal_server_error);
@@ -71,16 +91,18 @@ pub fn handleAgentWebSocketUpgrade(r: zap.Request) void {
     };
 
     const WsHandler = zap.WebSockets.Handler(websocket.WsContext);
-    var settings = WsHandler.WebSocketSettings{
-        .on_open = router.handleWebSocketOpen,
-        .on_message = router.handleWebSocketMessage,
-        .on_close = router.handleWebSocketClose,
-        .context = ws_ctx,
+    const upgrade_settings = allocator.create(WsHandler.WebSocketSettings) catch {
+        ws_ctx.deinit();
+        r.setStatus(.internal_server_error);
+        return;
     };
+    upgrade_settings.* = agent_ws_settings;
+    upgrade_settings.context = ws_ctx;
 
     log.info("Attempting WebSocket upgrade for agent: {s}", .{agent_id});
-    WsHandler.upgrade(r.h, &settings) catch |err| {
+    WsHandler.upgrade(r.h, upgrade_settings) catch |err| {
         log.err("Failed to upgrade agent to WebSocket: {any}", .{err});
+        allocator.destroy(upgrade_settings);
         ws_ctx.deinit();
         r.setStatus(.internal_server_error);
         r.sendBody("WebSocket upgrade failed") catch {};
@@ -1109,7 +1131,7 @@ fn handleValidateConnection(r: zap.Request, server_id: []const u8, ctx: *auth_mi
     r.sendBody(line_buf[0..line_len]) catch |err| log.err("Validate: sendBody: {any}", .{err});
 }
 
-fn handleInstallAgent(r: zap.Request, server_id: []const u8, ctx: *auth_middleware.RequestContext) void {
+fn handleInstallAgent(r: zap.Request, server_id_slice: []const u8, ctx: *auth_middleware.RequestContext) void {
     const db = router.getDatabase() orelse {
         r.setStatus(.internal_server_error);
         r.sendBody("{\"error\":\"Database not available\"}") catch {};
@@ -1121,7 +1143,13 @@ fn handleInstallAgent(r: zap.Request, server_id: []const u8, ctx: *auth_middlewa
         return;
     };
 
-    const team_id: ?[]const u8 = if (ctx.is_god) null else ctx.team_id;
+    // Duplicate IDs because this handler runs long and original slices might be invalidated
+    const server_id = allocator.dupe(u8, server_id_slice) catch return;
+    defer allocator.free(server_id);
+
+    const team_id_slice: ?[]const u8 = if (ctx.is_god) null else ctx.team_id;
+    const team_id = if (team_id_slice) |tid| allocator.dupe(u8, tid) catch null else null;
+    defer if (team_id) |tid| allocator.free(tid);
     var server = servers_service.getServerById(allocator, db, server_id, team_id) catch |err| {
         log.err("Install agent: get server failed: {any}", .{err});
         r.setStatus(.internal_server_error);
@@ -1222,6 +1250,15 @@ fn handleInstallAgent(r: zap.Request, server_id: []const u8, ctx: *auth_middlewa
     defer sse.deinit(allocator);
 
     var s = server.?;
+
+    // Set status to installing for UI feedback
+    const installing_data = servers_service.UpdateServerData{
+        .status = "installing",
+    };
+    _ = servers_service.updateServer(allocator, db, server_id, team_id, installing_data) catch |err| {
+        log.err("Install agent: update status failed: {any}", .{err});
+    };
+
     const success = agent_install.runInstallAgent(allocator, db, &s, pk.?.private_key, callback_url.?, root, &sse, team_id) catch |err| {
         log.err("Install agent: runInstallAgent: {any}", .{err});
         _ = sse.appendSlice(allocator, "data: {\"step\":\"error\",\"message\":\"Install failed\",\"status\":\"error\"}\n\n") catch {};
