@@ -543,6 +543,9 @@ pub fn updateServer(allocator: std.mem.Allocator, db: *sqlite.sqlite3, server_id
     const query_str = try sql_buf.toOwnedSlice(allocator);
     defer allocator.free(query_str);
 
+    // Log the generated query for debugging
+    log.debug("Update server query: {s}", .{query_str});
+
     // Execute UPDATE
     try query.execute(allocator, db, query_str);
 

@@ -113,6 +113,8 @@ pub fn runInstallAgent(
         server_url = std.fmt.bufPrint(&server_url_buf, "{s}/api/agent", .{base}) catch callback_url;
     }
 
+    log.info("Agent will connect back to: {s}", .{server_url});
+
     try appendSse(allocator, sse_out, "connecting", "Connecting to remote server via SSH...", "in-progress");
 
     var rand_buf: [8]u8 = undefined;
@@ -365,9 +367,9 @@ pub fn runInstallAgent(
     const service_mode = if (std.mem.eql(u8, init_system, "systemd")) "644" else "755";
 
     const enable_cmd = if (std.mem.eql(u8, init_system, "systemd"))
-        try std.fmt.allocPrint(allocator, "{s}rm -f /etc/init.d/selfhost-agent && {s}systemctl daemon-reload && {s}systemctl enable selfhost-agent && {s}systemctl restart selfhost-agent", .{ sudo_prefix, sudo_prefix, sudo_prefix, sudo_prefix })
+        try std.fmt.allocPrint(allocator, "{s}rm -f /etc/init.d/selfhost-agent && {s}systemctl daemon-reload && {s}systemctl enable selfhost-agent && {s}systemctl restart selfhost-agent < /dev/null > /dev/null 2>&1", .{ sudo_prefix, sudo_prefix, sudo_prefix, sudo_prefix })
     else
-        try std.fmt.allocPrint(allocator, "{s}chmod +x /etc/init.d/selfhost-agent && {s}rc-update add selfhost-agent default && {s}rc-service selfhost-agent restart", .{ sudo_prefix, sudo_prefix, sudo_prefix });
+        try std.fmt.allocPrint(allocator, "{s}chmod +x /etc/init.d/selfhost-agent && {s}rc-update add selfhost-agent default && {s}rc-service selfhost-agent restart < /dev/null > /dev/null 2>&1", .{ sudo_prefix, sudo_prefix, sudo_prefix });
     defer allocator.free(enable_cmd);
 
     const deps_cmd = if (std.mem.eql(u8, init_system, "openrc"))
@@ -400,7 +402,6 @@ pub fn runInstallAgent(
         \\{s}pkill -f start.sh || true
         \\{s}rm -f /var/log/selfhost-agent.log /tmp/selfhost-agent-wrapper.log || true
         \\{s}
-        \\{s}pkill -f start.sh || true
         \\echo "STEP: Writing start script..."
         \\echo '{s}' | base64 -d | {s}tee /var/lib/selfhost/start.sh > /dev/null && {s}chmod +x /var/lib/selfhost/start.sh
         \\echo "STEP: Writing service file..."
@@ -408,14 +409,14 @@ pub fn runInstallAgent(
         \\echo "STEP: Enabling service..."
         \\{s}
         \\echo "STEP: Done."
-        \\
+        \\sync
+        \\exit 0
     ,
         .{
             sudo_prefix,
             sudo_prefix,
             sudo_prefix,
             install_block,
-            sudo_prefix,
             start_b64_esc,
             sudo_prefix,
             sudo_prefix,
@@ -431,13 +432,25 @@ pub fn runInstallAgent(
 
     try appendSse(allocator, sse_out, "starting", "Starting SelfHost Agent service...", "in-progress");
 
-    var ssh_install_args = std.ArrayList([]const u8).initCapacity(allocator, 14) catch return false;
+    var ssh_install_args = std.ArrayList([]const u8).initCapacity(allocator, 25) catch return false;
     defer ssh_install_args.deinit(allocator);
     try ssh_install_args.append(allocator, "ssh");
     try ssh_install_args.append(allocator, "-i");
     try ssh_install_args.append(allocator, key_path_no_null);
     try ssh_install_args.append(allocator, "-o");
     try ssh_install_args.append(allocator, "StrictHostKeyChecking=no");
+    try ssh_install_args.append(allocator, "-o");
+    try ssh_install_args.append(allocator, "UserKnownHostsFile=/dev/null");
+    try ssh_install_args.append(allocator, "-o");
+    try ssh_install_args.append(allocator, "LogLevel=ERROR");
+    try ssh_install_args.append(allocator, "-o");
+    try ssh_install_args.append(allocator, "BatchMode=yes");
+    try ssh_install_args.append(allocator, "-o");
+    try ssh_install_args.append(allocator, "ConnectTimeout=15");
+    try ssh_install_args.append(allocator, "-o");
+    try ssh_install_args.append(allocator, "ServerAliveInterval=15");
+    try ssh_install_args.append(allocator, "-o");
+    try ssh_install_args.append(allocator, "ServerAliveCountMax=3");
     try ssh_install_args.append(allocator, "-o");
     try ssh_install_args.append(allocator, "UserKnownHostsFile=/dev/null");
     try ssh_install_args.append(allocator, "-o");
@@ -486,6 +499,7 @@ pub fn runInstallAgent(
     defer install_stderr.deinit(allocator); // Note: ArrayList.deinit takes allocator? No, Managed ArrayList deinit() takes nothing if it stores allocator. But here we might need to check if it stores it.
 
     // Collect output (this waits for process to exit)
+    log.info("Sending installation script to SSH...", .{});
     ssh_child.collectOutput(allocator, &install_stdout, &install_stderr, 50 * 1024) catch |err| {
         log.err("ssh collectOutput error: {any}", .{err});
         try appendSse(allocator, sse_out, "error", "Failed to capture install output", "error");
@@ -600,12 +614,14 @@ fn startShContent(allocator: std.mem.Allocator, server_url: []const u8, server_i
     var w = out.writer(allocator);
     try w.print(
         \\#!/bin/sh
+        \\exec </dev/null
+        \\exec >>/var/log/selfhost-agent.log
+        \\exec 2>&1
         \\export SELFHOST_SERVER_URL="{s}"
         \\export SELFHOST_AGENT_ID="{s}"
         \\export SELFHOST_AGENT_KEY="{s}"
         \\export BUN_INSTALL="$HOME/.bun"
         \\export PATH="$BUN_INSTALL/bin:$PATH"
-        \\exec 1>>/var/log/selfhost-agent.log 2>&1
         \\echo "--- Wrapper started at $(date) (PID: $$) ---"
         \\cleanup() {{ echo "Received stop signal..."; kill -TERM "$AGENT_PID" 2>/dev/null; wait "$AGENT_PID"; exit 0; }}
         \\trap cleanup TERM INT
@@ -651,6 +667,8 @@ fn serviceFileContent(allocator: std.mem.Allocator, init_system: []const u8) ![]
             \\command="/var/lib/selfhost/start.sh"
             \\command_background="yes"
             \\pidfile="/run/selfhost-agent.pid"
+            \\stdout_log="/var/log/selfhost-agent.log"
+            \\stderr_log="/var/log/selfhost-agent.log"
             \\respawn_delay=1
             \\respawn_max=0
             \\depend() { need net; after firewall; }

@@ -7,6 +7,7 @@ const router = @import("router.zig");
 const log = std.log.scoped(.agent_ws);
 
 pub fn handleMessage(handle: zap.WebSockets.WsHandle, message: []const u8) void {
+    log.info("Agent message received: {s}", .{message});
     const allocator = router.getAllocator() orelse return;
     const db = router.getDatabase() orelse return;
 

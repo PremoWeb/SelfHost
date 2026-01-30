@@ -592,6 +592,28 @@
 			toastStore.error('Server not available');
 			return;
 		}
+
+		// Auto-start tunnel in dev if using localhost
+		if (
+			dev &&
+			(!callbackUrl || callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1'))
+		) {
+			logStep('1c. Dev mode + local URL detected, ensuring Magic Tunnel is active...');
+			isStartingTunnel = true;
+			try {
+				const response = await createTunnelRemote();
+				if (response.success && response.data) {
+					callbackUrl = response.data.url.replace('https://', 'wss://');
+					logStep('1d. Magic Tunnel started automatically', { url: callbackUrl });
+					toastStore.info('Started Magic Tunnel for remote installation');
+				}
+			} catch (err) {
+				console.error('Failed to auto-start tunnel:', err);
+			} finally {
+				isStartingTunnel = false;
+			}
+		}
+
 		const serverId = server.id;
 		logStep('2. Starting', { serverId, callbackUrl: callbackUrl || '(empty)' });
 		isInstallingAgent = true;
@@ -1925,11 +1947,16 @@
 																Starting...
 															{:else}
 																<Zap class="mr-1 size-3" />
-																Develop with Magic Tunnel
+																{data.tunnelUrl ? 'Regenerate Tunnel' : 'Develop with Magic Tunnel'}
 															{/if}
 														</Button>
 													{/if}
 												</div>
+												{#if data.tunnelUrl}
+													<p class="mb-1 font-mono text-[10px] text-green-500">
+														Active Tunnel: {data.tunnelUrl}
+													</p>
+												{/if}
 												<Input
 													id="callbackUrl"
 													placeholder="e.g., wss://random-words.trycloudflare.com"

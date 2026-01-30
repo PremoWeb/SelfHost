@@ -155,10 +155,14 @@ pub fn queryAllWithParams(
 
 /// Execute a non-query statement (INSERT, UPDATE, DELETE)
 pub fn execute(allocator: std.mem.Allocator, db: *sqlite.sqlite3, sql_str: []const u8) QueryError!void {
-    _ = allocator;
     var err_msg: [*c][*c]u8 = null;
-    const rc = sqlite.sqlite3_exec(db, sql_str.ptr, null, null, @ptrCast(&err_msg));
-    
+
+    // Ensure null-termination for C API
+    const sql_z = allocator.dupeZ(u8, sql_str) catch return QueryError.OutOfMemory;
+    defer allocator.free(sql_z);
+
+    const rc = sqlite.sqlite3_exec(db, sql_z.ptr, null, null, @ptrCast(&err_msg));
+
     if (rc != sqlite.SQLITE_OK) {
         const err = if (err_msg) |msg| blk: {
             const err_str = std.mem.span(@as([*c]const u8, @ptrCast(msg)));
@@ -168,6 +172,6 @@ pub fn execute(allocator: std.mem.Allocator, db: *sqlite.sqlite3, sql_str: []con
         log.err("Failed to execute query: {s}", .{err});
         return QueryError.ExecuteFailed;
     }
-    
+
     if (err_msg) |msg| sqlite.sqlite3_free(@as(?*anyopaque, @ptrCast(msg)));
 }

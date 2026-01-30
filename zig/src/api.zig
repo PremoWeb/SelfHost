@@ -246,7 +246,7 @@ pub fn handleDevTunnel(r: zap.Request, method: zap.http.Method) void {
     }
     switch (method) {
         .GET => {
-            const url = dev_tunnel.getUrl();
+            const url = dev_tunnel.getUrl(allocator);
             if (url) |u| {
                 var buf: [512]u8 = undefined;
                 const body = std.fmt.bufPrint(&buf, "{{\"url\":\"{s}\"}}", .{u}) catch {
@@ -1209,6 +1209,14 @@ fn handleInstallAgent(r: zap.Request, server_id_slice: []const u8, ctx: *auth_mi
             const proto = r.getHeader("x-forwarded-proto") orelse "http";
             const ws_proto = if (std.mem.eql(u8, proto, "https")) "wss" else "ws";
             callback_url = std.fmt.allocPrint(allocator, "{s}://{s}", .{ ws_proto, host }) catch null;
+        }
+
+        // If still null, try Magic Tunnel URL
+        if (callback_url == null or callback_url.?.len == 0) {
+            if (callback_url) |c| allocator.free(c);
+            if (dev_tunnel.getUrl(allocator)) |t_url| {
+                callback_url = allocator.dupe(u8, t_url) catch null;
+            }
         }
     }
 

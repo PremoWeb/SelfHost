@@ -3,6 +3,11 @@ import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
+console.log("----------------------------------------");
+console.log("Loading frontend/vite.config.ts");
+console.log("CWD:", process.cwd());
+console.log("----------------------------------------");
+
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	build: {
@@ -14,8 +19,17 @@ export default defineConfig({
 		port: 5173,
 		strictPort: true,
 		proxy: {
-			'/api': { target: 'http://localhost:3000', changeOrigin: true },
-			'/ws': { target: 'ws://localhost:3000', ws: true }
+			'/api/agent': {
+				target: 'http://127.0.0.1:3000',
+				ws: true,
+				changeOrigin: false, // Keep original host for signature verification
+			},
+			'/api': { 
+				target: 'http://127.0.0.1:3000', 
+				changeOrigin: true, 
+				ws: true,
+			},
+			'/ws': { target: 'ws://127.0.0.1:3000', ws: true }
 		}
 	},
 	optimizeDeps: {

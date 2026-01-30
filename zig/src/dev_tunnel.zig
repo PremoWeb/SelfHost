@@ -18,11 +18,66 @@ pub fn isDevMode(allocator: std.mem.Allocator) bool {
 var tunnel_mutex: std.Thread.Mutex = .{};
 var tunnel_url: ?[]const u8 = null;
 var tunnel_child: ?*std.process.Child = null;
+var tunnel_restored = false; // Track if we've tried to restore from file
+
+/// Try to restore tunnel from previous server instance
+fn tryRestoreTunnel(allocator: std.mem.Allocator) void {
+    if (tunnel_restored) return;
+    tunnel_restored = true;
+
+    const file = std.fs.openFileAbsolute("/tmp/selfhost-tunnel.txt", .{}) catch return;
+    defer file.close();
+
+    var buf: [512]u8 = undefined;
+    const n = file.readAll(&buf) catch return;
+    if (n == 0) return;
+
+    var lines = std.mem.splitSequence(u8, buf[0..n], "\n");
+    const pid_str = lines.next() orelse return;
+    const url_str = lines.next() orelse return;
+
+    const pid = std.fmt.parseInt(i32, pid_str, 10) catch return;
+
+    // Check if process is still alive
+    const result = std.posix.waitpid(pid, std.posix.W.NOHANG);
+    if (result.pid == 0) {
+        // Process is still running, restore it
+        tunnel_url = allocator.dupe(u8, url_str) catch return;
+        log.info("Restored tunnel from previous instance: pid={d}, url={s}", .{ pid, url_str });
+        // Note: we don't restore tunnel_child because we don't own the process
+    }
+}
 
 /// Return current tunnel URL if running. Caller does not own the slice.
-pub fn getUrl() ?[]const u8 {
+pub fn getUrl(allocator: std.mem.Allocator) ?[]const u8 {
     tunnel_mutex.lock();
     defer tunnel_mutex.unlock();
+
+    // Try to restore tunnel from previous instance on first call
+    tryRestoreTunnel(allocator);
+
+    // If we have a child, check if it's still running (non-blocking)
+    // TEMPORARILY DISABLED to test if waitpid is causing issues
+    // if (tunnel_child) |c| {
+    //     if (c.id > 0) {
+    //         const pid_result = std.posix.waitpid(c.id, std.posix.W.NOHANG);
+    //         log.debug("Tunnel check: child.id={d}, waitpid.pid={d}", .{c.id, pid_result.pid});
+    //
+    //         // waitpid with NOHANG returns pid=0 if still running, pid>0 if exited
+    //         if (pid_result.pid > 0) {
+    //             // Process has exited, clear state
+    //             log.info("Tunnel process {d} has exited, clearing state", .{c.id});
+    //             if (tunnel_url) |url| {
+    //                 allocator.free(url);
+    //                 tunnel_url = null;
+    //             }
+    //             allocator.destroy(c);
+    //             tunnel_child = null;
+    //             return null;
+    //         }
+    //     }
+    // }
+
     return tunnel_url;
 }
 
@@ -57,7 +112,7 @@ pub fn start(allocator: std.mem.Allocator, timeout_ms: u32) ![]const u8 {
         _ = child.kill() catch {};
         return error.NoStderr;
     };
-    defer stderr.close();
+    // Don't close stderr with defer - we need to keep it open for the child process
 
     var buf: [4096]u8 = undefined;
     var total_len: usize = 0;
@@ -84,6 +139,8 @@ pub fn start(allocator: std.mem.Allocator, timeout_ms: u32) ![]const u8 {
             const url = allocator.dupe(u8, url_slice) catch return error.OutOfMemory;
             tunnel_url = url;
             tunnel_child = child;
+            // Don't close stderr - just stop reading from it
+            // The child process will continue writing to it harmlessly
             return url;
         }
     }
@@ -117,15 +174,28 @@ fn findTryCloudflareUrl(buf: []const u8) ?[]const u8 {
 
 /// Clear stored URL (e.g. when child exits). Call when shutting down or restarting.
 pub fn clearUrl(allocator: std.mem.Allocator) void {
+    _ = allocator; // We don't free memory to allow persistence
     tunnel_mutex.lock();
     defer tunnel_mutex.unlock();
-    if (tunnel_url) |url| {
-        allocator.free(url);
-        tunnel_url = null;
-    }
+
+    // Save tunnel info to file for persistence across restarts
     if (tunnel_child) |c| {
-        _ = c.kill() catch {};
-        allocator.destroy(c);
-        tunnel_child = null;
+        if (tunnel_url) |url| {
+            const file = std.fs.createFileAbsolute("/tmp/selfhost-tunnel.txt", .{}) catch |err| {
+                log.err("Failed to save tunnel info: {any}", .{err});
+                return;
+            };
+            defer file.close();
+
+            var buf: [512]u8 = undefined;
+            const content = std.fmt.bufPrint(&buf, "{d}\n{s}", .{ c.id, url }) catch return;
+            file.writeAll(content) catch |err| {
+                log.err("Failed to write tunnel info: {any}", .{err});
+            };
+            log.info("Saved tunnel info: pid={d}, url={s}", .{ c.id, url });
+        }
     }
+
+    // Don't kill the tunnel or free memory - let it persist
+    // The next server instance will pick it up
 }
