@@ -548,3 +548,130 @@ pub fn serializeLogsResponse(
 
     return try json.toOwnedSlice(allocator);
 }
+
+/// Serialize Git repository to JSON
+pub fn serializeGitRepository(allocator: std.mem.Allocator, repo: anytype) ![]const u8 {
+    var json = std.ArrayList(u8).initCapacity(allocator, 512) catch return error.OutOfMemory;
+    errdefer json.deinit(allocator);
+    var writer = json.writer(allocator);
+
+    const id_esc = try escapeJson(allocator, repo.id);
+    defer allocator.free(id_esc);
+    const project_id_esc = try escapeJson(allocator, repo.project_id);
+    defer allocator.free(project_id_esc);
+    const name_esc = try escapeJson(allocator, repo.name);
+    defer allocator.free(name_esc);
+    const path_esc = try escapeJson(allocator, repo.repository_path);
+    defer allocator.free(path_esc);
+    const branch_esc = try escapeJson(allocator, repo.default_branch);
+    defer allocator.free(branch_esc);
+
+    try writer.print(
+        \\{{"id":"{s}","project_id":"{s}","name":"{s}","is_private":{s},"repository_path":"{s}","default_branch":"{s}","size":{d},"commit_count":{d},"branch_count":{d},"tag_count":{d},"allow_http_push":{s},"allow_ssh_push":{s},"is_template":{s},"is_read_only":{s},"created_at":{d},"updated_at":{d}
+    , .{
+        id_esc,
+        project_id_esc,
+        name_esc,
+        if (repo.is_private) "true" else "false",
+        path_esc,
+        branch_esc,
+        repo.size,
+        repo.commit_count,
+        repo.branch_count,
+        repo.tag_count,
+        if (repo.allow_http_push) "true" else "false",
+        if (repo.allow_ssh_push) "true" else "false",
+        if (repo.is_template) "true" else "false",
+        if (repo.is_read_only) "true" else "false",
+        repo.created_at,
+        repo.updated_at,
+    });
+
+    if (repo.description) |desc| {
+        const desc_esc = try escapeJson(allocator, desc);
+        defer allocator.free(desc_esc);
+        try writer.print(",\"description\":\"{s}\"", .{desc_esc});
+    } else {
+        try writer.writeAll(",\"description\":null");
+    }
+
+    if (repo.last_commit_at) |ts| {
+        try writer.print(",\"last_commit_at\":{d}", .{ts});
+    } else {
+        try writer.writeAll(",\"last_commit_at\":null");
+    }
+
+    if (repo.last_commit_message) |msg| {
+        const msg_esc = try escapeJson(allocator, msg);
+        defer allocator.free(msg_esc);
+        try writer.print(",\"last_commit_message\":\"{s}\"", .{msg_esc});
+    } else {
+        try writer.writeAll(",\"last_commit_message\":null");
+    }
+
+    if (repo.last_commit_author) |author| {
+        const author_esc = try escapeJson(allocator, author);
+        defer allocator.free(author_esc);
+        try writer.print(",\"last_commit_author\":\"{s}\"", .{author_esc});
+    } else {
+        try writer.writeAll(",\"last_commit_author\":null");
+    }
+
+    try writer.writeAll("}}");
+    return try json.toOwnedSlice(allocator);
+}
+
+/// Serialize SSH key to JSON (exclude the full public key for security in lists)
+pub fn serializeSshKey(allocator: std.mem.Allocator, key: anytype) ![]const u8 {
+    var json = std.ArrayList(u8).initCapacity(allocator, 256) catch return error.OutOfMemory;
+    errdefer json.deinit(allocator);
+    var writer = json.writer(allocator);
+
+    const id_esc = try escapeJson(allocator, key.id);
+    defer allocator.free(id_esc);
+    const user_id_esc = try escapeJson(allocator, key.user_id);
+    defer allocator.free(user_id_esc);
+    const title_esc = try escapeJson(allocator, key.title);
+    defer allocator.free(title_esc);
+    const key_type_esc = try escapeJson(allocator, key.key_type);
+    defer allocator.free(key_type_esc);
+    const fingerprint_esc = try escapeJson(allocator, key.fingerprint);
+    defer allocator.free(fingerprint_esc);
+
+    try writer.print(
+        \\{{"id":"{s}","user_id":"{s}","title":"{s}","key_type":"{s}","fingerprint":"{s}","created_at":{d}
+    , .{
+        id_esc,
+        user_id_esc,
+        title_esc,
+        key_type_esc,
+        fingerprint_esc,
+        key.created_at,
+    });
+
+    if (key.last_used_at) |ts| {
+        try writer.print(",\"last_used_at\":{d}", .{ts});
+    } else {
+        try writer.writeAll(",\"last_used_at\":null");
+    }
+
+    try writer.writeAll("}}");
+    return try json.toOwnedSlice(allocator);
+}
+
+/// Serialize SSH key array to JSON
+pub fn serializeSshKeyArray(allocator: std.mem.Allocator, keys: anytype) ![]const u8 {
+    var json = std.ArrayList(u8).initCapacity(allocator, 256) catch return error.OutOfMemory;
+    errdefer json.deinit(allocator);
+    var writer = json.writer(allocator);
+
+    try writer.writeAll("{\"data\":[");
+    for (keys.items, 0..) |key, i| {
+        if (i > 0) try writer.writeAll(",");
+        const key_json = try serializeSshKey(allocator, key);
+        defer allocator.free(key_json);
+        try writer.print("{s}", .{key_json});
+    }
+    try writer.writeAll("]}");
+    return try json.toOwnedSlice(allocator);
+}
