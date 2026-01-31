@@ -140,17 +140,83 @@ pub fn queryAllWithParams(
 
     // Bind parameters
     for (params, 0..) |param, i| {
-        const param_z = try std.fmt.allocPrintZ(allocator, "{s}", .{param});
+        const param_z = allocator.dupeZ(u8, param) catch return QueryError.OutOfMemory;
         defer allocator.free(param_z);
         _ = sqlite.sqlite3_bind_text(stmt, @intCast(i + 1), param_z.ptr, @intCast(param.len), sqlite.SQLITE_TRANSIENT);
     }
 
-    // Execute and collect results (reuse queryAll logic)
-    // For now, use a simpler approach
-    // For parameterized queries, we'd need to prepare and bind
-    // For now, return error - can be implemented when needed
-    // Statement is prepared and parameters are bound, but not executed yet
-    return QueryError.NotImplemented;
+    // Execute and collect results
+    var results = std.ArrayList(std.StringHashMap([]const u8)).initCapacity(allocator, 0) catch return error.OutOfMemory;
+    errdefer {
+        for (results.items) |*row| {
+            var it = row.iterator();
+            while (it.next()) |entry| {
+                allocator.free(entry.key_ptr.*);
+                allocator.free(entry.value_ptr.*);
+            }
+            row.deinit();
+        }
+        results.deinit(allocator);
+    }
+
+    while (true) {
+        const step_rc = sqlite.sqlite3_step(stmt);
+        if (step_rc == sqlite.SQLITE_DONE) break;
+        if (step_rc != sqlite.SQLITE_ROW) {
+            log.err("Failed to step query: {s}", .{sqlite.sqlite3_errmsg(db)});
+            return QueryError.ExecuteFailed;
+        }
+
+        var row = std.StringHashMap([]const u8).init(allocator);
+        errdefer {
+            var it = row.iterator();
+            while (it.next()) |entry| {
+                allocator.free(entry.key_ptr.*);
+                allocator.free(entry.value_ptr.*);
+            }
+            row.deinit();
+        }
+
+        const col_count = sqlite.sqlite3_column_count(stmt);
+        for (0..@intCast(col_count)) |i| {
+            const col_name = sqlite.sqlite3_column_name(stmt, @intCast(i));
+            const col_name_len = std.mem.len(col_name);
+            const col_name_owned = try allocator.dupe(u8, col_name[0..col_name_len]);
+
+            const col_type = sqlite.sqlite3_column_type(stmt, @intCast(i));
+            const col_value: []const u8 = switch (col_type) {
+                sqlite.SQLITE_NULL => "",
+                sqlite.SQLITE_INTEGER => blk: {
+                    const val = sqlite.sqlite3_column_int64(stmt, @intCast(i));
+                    const val_str = try std.fmt.allocPrint(allocator, "{d}", .{val});
+                    break :blk val_str;
+                },
+                sqlite.SQLITE_FLOAT => blk: {
+                    const val = sqlite.sqlite3_column_double(stmt, @intCast(i));
+                    const val_str = try std.fmt.allocPrint(allocator, "{d}", .{val});
+                    break :blk val_str;
+                },
+                sqlite.SQLITE_TEXT => blk: {
+                    const text = sqlite.sqlite3_column_text(stmt, @intCast(i));
+                    const text_len = sqlite.sqlite3_column_bytes(stmt, @intCast(i));
+                    break :blk try allocator.dupe(u8, text[0..@intCast(text_len)]);
+                },
+                sqlite.SQLITE_BLOB => blk: {
+                    const blob = sqlite.sqlite3_column_blob(stmt, @intCast(i));
+                    const blob_len = sqlite.sqlite3_column_bytes(stmt, @intCast(i));
+                    const blob_ptr = @as([*]const u8, @ptrCast(blob));
+                    break :blk try allocator.dupe(u8, blob_ptr[0..@intCast(blob_len)]);
+                },
+                else => "",
+            };
+
+            try row.put(col_name_owned, col_value);
+        }
+
+        try results.append(allocator, row);
+    }
+
+    return results;
 }
 
 /// Execute a non-query statement (INSERT, UPDATE, DELETE)

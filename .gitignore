@@ -59,3 +59,7 @@ vite.config.ts.timestamp-*
 # Bun
 bun.lockb
 .bun
+
+# Zig
+.zig-cache/
+zig-out/

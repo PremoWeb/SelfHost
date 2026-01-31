@@ -1,5 +1,6 @@
 // Main entry point for Zig server
 // Initializes database, runs migrations, and starts HTTP/WebSocket server
+// CLI: selfhost-server diagnose homelab  — SSH to server and run agent diagnostics
 
 const std = @import("std");
 const database = @import("db/database.zig");
@@ -9,6 +10,8 @@ const realtime = @import("db/realtime.zig");
 const websocket = @import("websocket.zig");
 const dev_tunnel = @import("dev_tunnel.zig");
 const api = @import("api.zig");
+const cli_diagnose = @import("cli_diagnose.zig");
+const logs_service = @import("services/logs.zig");
 
 const log = std.log.scoped(.main);
 
@@ -16,6 +19,30 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
+
+    const args = std.process.argsAlloc(allocator) catch return;
+    defer std.process.argsFree(allocator, args);
+    if (args.len >= 2 and std.mem.eql(u8, args[1], "diagnose")) {
+        const name_or_id: []const u8 = if (args.len >= 3) args[2] else "homelab";
+        var db = try database.openFromEnv(allocator);
+        defer db.deinit();
+        const migrations_dir = std.process.getEnvVarOwned(allocator, "DRIZZLE_DIR") catch |err| blk: {
+            if (err != error.EnvironmentVariableNotFound) return err;
+            const dir = std.fs.cwd().openDir("drizzle", .{}) catch null;
+            if (dir) |d| {
+                @constCast(&d).close();
+                break :blk try allocator.dupe(u8, "drizzle");
+            }
+            break :blk try allocator.dupe(u8, "../drizzle");
+        };
+        defer allocator.free(migrations_dir);
+        try db.initialize(migrations_dir);
+        cli_diagnose.run(allocator, db.getConnection(), name_or_id) catch |err| {
+            log.err("diagnose: {any}", .{err});
+            std.process.exit(1);
+        };
+        return;
+    }
 
     log.info("Starting selfhost server...", .{});
 
@@ -40,6 +67,35 @@ pub fn main() !void {
     try db.initialize(migrations_dir);
     log.info("Database initialized successfully", .{});
 
+    // Open logging database (separate from main DB)
+    log.info("Opening logging database...", .{});
+    const logs_db_path = std.process.getEnvVarOwned(allocator, "LOGGING_DATABASE_URL") catch |err| blk: {
+        if (err != error.EnvironmentVariableNotFound) return err;
+        // Default: sqlite-logs.db in same directory as main DB
+        // Resolve relative to DATABASE_URL directory if set
+        const main_db_url = std.process.getEnvVarOwned(allocator, "DATABASE_URL") catch |e| {
+            if (e != error.EnvironmentVariableNotFound) return e;
+            break :blk try allocator.dupe(u8, "sqlite-logs.db");
+        };
+        defer allocator.free(main_db_url);
+        // Strip file: prefix
+        const main_path = if (std.mem.startsWith(u8, main_db_url, "file:")) main_db_url[5..] else main_db_url;
+        // Find directory part
+        if (std.mem.lastIndexOfScalar(u8, main_path, '/')) |last_slash| {
+            break :blk try std.fmt.allocPrint(allocator, "{s}/sqlite-logs.db", .{main_path[0..last_slash]});
+        }
+        break :blk try allocator.dupe(u8, "sqlite-logs.db");
+    };
+    defer allocator.free(logs_db_path);
+    // Strip file: prefix if present
+    const effective_logs_path = if (std.mem.startsWith(u8, logs_db_path, "file:"))
+        logs_db_path[5..]
+    else
+        logs_db_path;
+    var logs_db = try database.Database.init(allocator, effective_logs_path);
+    defer logs_db.deinit();
+    logs_service.initializeLogsDb(logs_db.getConnection(), allocator);
+
     // Set up SQLite update hooks for real-time notifications
     log.info("Setting up real-time update hooks...", .{});
     try realtime.init(allocator, db.getConnection());
@@ -52,6 +108,7 @@ pub fn main() !void {
 
     // Set router context
     router.setContext(&db, allocator);
+    router.setLogsDb(&logs_db);
 
     // Initialize API settings
     api.init(allocator);

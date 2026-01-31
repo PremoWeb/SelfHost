@@ -21,6 +21,8 @@ const json_parser = @import("utils/json_parser.zig");
 const request_body = @import("utils/request_body.zig");
 const session = @import("auth/session.zig");
 const dev_tunnel = @import("dev_tunnel.zig");
+const vultr = @import("vultr.zig");
+const logs_service = @import("services/logs.zig");
 
 const log = std.log.scoped(.api);
 
@@ -42,16 +44,20 @@ pub fn handleAgentWebSocketUpgrade(r: zap.Request) void {
     const allocator = router.getAllocator() orelse return;
     const db = router.getDatabase() orelse return;
 
-    // Check headers
-    const host_debug = r.getHeader("host") orelse "unknown";
+    // Check headers using case-insensitive wrapper
+    const headers = auth_middleware.HeaderWrapper{ .request = &r };
+    const host_debug = headers.get("Host") orelse "unknown"; // Check Host then host
     log.info("DEBUG: handleAgentWebSocketUpgrade called. host={s}", .{host_debug});
 
-    const agent_id = r.getHeader("x-selfhost-agent-id") orelse {
+    // Use Title-Case here so wrapper checks Title-Case AND Lowercase
+    const agent_id = headers.get("X-Selfhost-Agent-Id") orelse {
+        log.warn("Missing agent id header", .{});
         r.setStatus(.unauthorized);
         r.sendBody("Missing agent id") catch {};
         return;
     };
-    const agent_key = r.getHeader("x-selfhost-agent-key") orelse {
+    const agent_key = headers.get("X-Selfhost-Agent-Key") orelse {
+        log.warn("Missing agent key header", .{});
         r.setStatus(.unauthorized);
         r.sendBody("Missing agent key") catch {};
         return;
@@ -109,6 +115,57 @@ pub fn handleAgentWebSocketUpgrade(r: zap.Request) void {
         return;
     };
     log.info("WebSocket upgrade successful for agent: {s}", .{agent_id});
+}
+
+/// WebSocket upgrade for frontend (authenticated users)
+pub fn handleWebSocketUpgrade(r: zap.Request) void {
+    const allocator = router.getAllocator() orelse return;
+    const db = router.getDatabase() orelse return;
+
+    // Check auth
+    var auth_ctx = auth_middleware.extractAuthContext(allocator, db, &r) catch |err| {
+        log.err("Failed to extract auth context for WS upgrade: {any}", .{err});
+        r.setStatus(.internal_server_error);
+        return;
+    };
+    defer auth_ctx.deinit();
+
+    // Check if user is authenticated (valid session)
+    if (auth_ctx.user == null) {
+        log.warn("Unauthorized WebSocket upgrade attempt", .{});
+        r.setStatus(.unauthorized);
+        return;
+    }
+
+    // Success - create context and upgrade
+    const ws_ctx = allocator.create(websocket.WsContext) catch {
+        r.setStatus(.internal_server_error);
+        return;
+    };
+    ws_ctx.* = .{
+        .server_id = null,
+        .allocator = allocator,
+    };
+
+    const WsHandler = zap.WebSockets.Handler(websocket.WsContext);
+    const upgrade_settings = allocator.create(WsHandler.WebSocketSettings) catch {
+        ws_ctx.deinit();
+        r.setStatus(.internal_server_error);
+        return;
+    };
+    upgrade_settings.* = agent_ws_settings;
+    upgrade_settings.context = ws_ctx;
+
+    log.info("Attempting WebSocket upgrade for frontend user: {s}", .{auth_ctx.user.?.id});
+    WsHandler.upgrade(r.h, upgrade_settings) catch |err| {
+        log.err("Failed to upgrade frontend to WebSocket: {any}", .{err});
+        allocator.destroy(upgrade_settings);
+        ws_ctx.deinit();
+        r.setStatus(.internal_server_error);
+        r.sendBody("WebSocket upgrade failed") catch {};
+        return;
+    };
+    log.info("WebSocket upgrade successful for user: {s}", .{auth_ctx.user.?.id});
 }
 
 /// POST: append or replace dev install-agent log file. Body: { "replace": boolean?, "message": string }. Dev-only (SELFHOST_DEV=1).
@@ -746,6 +803,16 @@ pub fn handleApiRequest(r: zap.Request, path: []const u8, method: zap.http.Metho
         handleServers(r, method, &ctx);
         return;
     }
+    if ((method == .GET or method == .POST) and std.mem.endsWith(u8, path, "/diagnose")) {
+        const prefix = "/api/servers/";
+        const suffix = "/diagnose";
+        if (path.len >= prefix.len + suffix.len and std.mem.startsWith(u8, path, prefix)) {
+            var uuid_slice = path[prefix.len .. path.len - suffix.len];
+            if (std.mem.indexOf(u8, uuid_slice, "?")) |q_pos| uuid_slice = uuid_slice[0..q_pos];
+            handleDiagnoseAgent(r, uuid_slice, &ctx);
+            return;
+        }
+    }
     if (method == .POST and std.mem.endsWith(u8, path, "/install-agent")) {
         const prefix = "/api/servers/";
         const suffix = "/install-agent";
@@ -791,9 +858,27 @@ pub fn handleApiRequest(r: zap.Request, path: []const u8, method: zap.http.Metho
         handleProjectById(r, method, uuid_slice, &ctx);
         return;
     }
+    if (method == .GET and std.mem.startsWith(u8, path, "/api/vps-providers/")) {
+        const rest = path["/api/vps-providers/".len..];
+        if (std.mem.indexOf(u8, rest, "/")) |slash| {
+            const id = rest[0..slash];
+            const sub = rest[slash + 1 ..];
+            if (std.mem.eql(u8, sub, "instances") or std.mem.eql(u8, sub, "ssh-keys") or
+                std.mem.eql(u8, sub, "regions") or std.mem.eql(u8, sub, "plans") or std.mem.eql(u8, sub, "os"))
+            {
+                handleVpsProviderVultr(r, id, sub, &ctx);
+                return;
+            }
+        }
+    }
     if (std.mem.startsWith(u8, path, "/api/vps-providers/")) {
-        const id = path["/api/vps-providers/".len..];
+        var id = path["/api/vps-providers/".len..];
+        if (std.mem.indexOf(u8, id, "?")) |q_pos| id = id[0..q_pos];
         handleVpsProviderById(r, method, id, &ctx);
+        return;
+    }
+    if (method == .GET and std.mem.eql(u8, path, "/api/private-keys")) {
+        handlePrivateKeysList(r, &ctx);
         return;
     }
     if (std.mem.eql(u8, path, "/api/vps-providers")) {
@@ -815,6 +900,10 @@ pub fn handleApiRequest(r: zap.Request, path: []const u8, method: zap.http.Metho
     }
     if (method == .GET and std.mem.eql(u8, path, "/api/users")) {
         handleUsers(r, &ctx);
+        return;
+    }
+    if (method == .GET and std.mem.eql(u8, path, "/api/logs")) {
+        handleLogs(r, &ctx);
         return;
     }
 
@@ -1129,6 +1218,88 @@ fn handleValidateConnection(r: zap.Request, server_id: []const u8, ctx: *auth_mi
     r.setStatus(.ok);
     r.setContentType(.JSON) catch {};
     r.sendBody(line_buf[0..line_len]) catch |err| log.err("Validate: sendBody: {any}", .{err});
+}
+
+fn handleDiagnoseAgent(r: zap.Request, server_id_slice: []const u8, ctx: *auth_middleware.RequestContext) void {
+    const db = router.getDatabase() orelse {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Database not available\"}") catch {};
+        return;
+    };
+    const allocator = router.getAllocator() orelse {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Allocator not available\"}") catch {};
+        return;
+    };
+    const server_id = allocator.dupe(u8, server_id_slice) catch return;
+    defer allocator.free(server_id);
+    const team_id: ?[]const u8 = if (ctx.is_god) null else ctx.team_id;
+    var server = servers_service.getServerById(allocator, db, server_id, team_id) catch |err| {
+        log.err("Diagnose: get server failed: {any}", .{err});
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Failed to query server\"}") catch {};
+        return;
+    };
+    if (server == null) {
+        server = servers_service.getServerById(allocator, db, server_id, null) catch null;
+        if (server) |*s| {
+            const proj_team = s.team_id orelse "";
+            const ctx_tid = team_id orelse "";
+            const team_match = std.mem.eql(u8, proj_team, ctx_tid) or std.ascii.eqlIgnoreCase(proj_team, ctx_tid);
+            if (!team_match) {
+                @constCast(s).deinit(allocator);
+                server = null;
+            }
+        }
+    }
+    defer if (server) |*s| @constCast(s).deinit(allocator);
+    if (server == null) {
+        r.setStatus(.not_found);
+        r.sendBody("{\"error\":\"Server not found\"}") catch {};
+        return;
+    }
+    if (server.?.private_key_id == null) {
+        r.setStatus(.bad_request);
+        r.sendBody("{\"error\":\"Server has no private key. Attach a deployment key first.\"}") catch {};
+        return;
+    }
+    var pk = security_service.getPrivateKeyById(allocator, db, server.?.private_key_id.?, team_id, ctx.is_god) catch |err| {
+        log.err("Diagnose: get private key failed: {any}", .{err});
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Failed to get private key\"}") catch {};
+        return;
+    };
+    if (pk == null) {
+        r.setStatus(.not_found);
+        r.sendBody("{\"error\":\"Private key not found\"}") catch {};
+        return;
+    }
+    defer if (pk) |*key| key.deinit(allocator);
+    var s = server.?;
+    const output = agent_install.runDiagnoseAgent(allocator, &s, pk.?.private_key) catch |err| {
+        log.err("Diagnose: runDiagnoseAgent: {any}", .{err});
+        r.setStatus(.internal_server_error);
+        const err_msg = std.fmt.allocPrint(allocator, "{{\"error\":\"Diagnostic failed: {s}\"}}", .{@errorName(err)}) catch return;
+        defer allocator.free(err_msg);
+        r.sendBody(err_msg) catch {};
+        return;
+    };
+    defer allocator.free(output);
+    const escaped = json_util.escapeJson(allocator, output) catch {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Failed to escape output\"}") catch {};
+        return;
+    };
+    defer allocator.free(escaped);
+    const body = std.fmt.allocPrint(allocator, "{{\"output\":\"{s}\"}}", .{escaped}) catch {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Out of memory\"}") catch {};
+        return;
+    };
+    defer allocator.free(body);
+    r.setStatus(.ok);
+    r.setContentType(.JSON) catch {};
+    r.sendBody(body) catch |err| log.err("Diagnose: sendBody: {any}", .{err});
 }
 
 fn handleInstallAgent(r: zap.Request, server_id_slice: []const u8, ctx: *auth_middleware.RequestContext) void {
@@ -1996,6 +2167,93 @@ fn handleVpsProviders(r: zap.Request, method: zap.http.Method, ctx: *auth_middle
     }
 }
 
+fn handleVpsProviderVultr(r: zap.Request, id: []const u8, sub_path: []const u8, ctx: *auth_middleware.RequestContext) void {
+    const db = router.getDatabase() orelse {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Database not available\"}") catch {};
+        return;
+    };
+    const allocator = router.getAllocator() orelse {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Allocator not available\"}") catch {};
+        return;
+    };
+    const team_id: ?[]const u8 = if (ctx.is_god) null else ctx.team_id;
+    const provider = vps_providers_service.getById(allocator, db, id, team_id) catch |err| {
+        log.err("Failed to get vps provider: {any}", .{err});
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Failed to query\"}") catch {};
+        return;
+    } orelse {
+        r.setStatus(.not_found);
+        r.sendBody("{\"error\":\"Not found\"}") catch {};
+        return;
+    };
+    defer @constCast(&provider).deinit(allocator);
+    if (!std.mem.eql(u8, provider.type_name, "vultr")) {
+        r.setStatus(.bad_request);
+        r.sendBody("{\"error\":\"Vultr only\"}") catch {};
+        return;
+    }
+    const vultr_result = vultr.fetch(allocator, provider.api_key, sub_path) catch |err| {
+        log.err("Vultr fetch {s}: {any}", .{ sub_path, err });
+        r.setStatus(.bad_gateway);
+        r.sendBody("{\"error\":\"Vultr API request failed\"}") catch {};
+        return;
+    };
+    defer allocator.free(vultr_result.body);
+    r.setStatus(if (vultr_result.status >= 200 and vultr_result.status < 300) .ok else .bad_gateway);
+    r.setContentType(.JSON) catch {};
+    r.sendBody(vultr_result.body) catch {};
+}
+
+fn handlePrivateKeysList(r: zap.Request, ctx: *auth_middleware.RequestContext) void {
+    const db = router.getDatabase() orelse {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Database not available\"}") catch {};
+        return;
+    };
+    const allocator = router.getAllocator() orelse {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Allocator not available\"}") catch {};
+        return;
+    };
+    const team_id: ?[]const u8 = if (ctx.is_god) null else ctx.team_id;
+    var keys = security_service.listPrivateKeysByTeam(allocator, db, team_id, ctx.is_god) catch |err| {
+        log.err("listPrivateKeysByTeam: {any}", .{err});
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Failed to list keys\"}") catch {};
+        return;
+    };
+    defer {
+        for (keys.items) |*k| k.deinit(allocator);
+        keys.deinit(allocator);
+    }
+    var out = std.ArrayList(u8).initCapacity(allocator, 512) catch {
+        r.setStatus(.internal_server_error);
+        return;
+    };
+    defer out.deinit(allocator);
+    var writer = out.writer(allocator);
+    writer.print("{{\"data\":[", .{}) catch {
+        r.setStatus(.internal_server_error);
+        return;
+    };
+    for (keys.items, 0..) |k, i| {
+        if (i > 0) _ = writer.write(", ") catch {};
+        const id_esc = json_util.escapeJson(allocator, k.id) catch return;
+        defer allocator.free(id_esc);
+        const name_esc = json_util.escapeJson(allocator, k.name) catch return;
+        defer allocator.free(name_esc);
+        writer.print("{{\"id\":\"{s}\",\"name\":\"{s}\"}}", .{ id_esc, name_esc }) catch return;
+    }
+    writer.print("]}}", .{}) catch return;
+    const json = out.toOwnedSlice(allocator) catch return;
+    defer allocator.free(json);
+    r.setContentType(.JSON) catch {};
+    r.sendBody(json) catch {};
+}
+
 fn handleVpsProviderById(r: zap.Request, method: zap.http.Method, id: []const u8, ctx: *auth_middleware.RequestContext) void {
     const db = router.getDatabase() orelse {
         r.setStatus(.internal_server_error);
@@ -2345,4 +2603,69 @@ pub fn handleSpaFallback(r: zap.Request) void {
         r.setStatus(.internal_server_error);
         r.sendBody("Internal Server Error") catch {};
     };
+}
+
+// Action Logs API (God-only)
+fn handleLogs(r: zap.Request, ctx: *auth_middleware.RequestContext) void {
+    // God-only endpoint
+    if (!ctx.is_god) {
+        r.setStatus(.forbidden);
+        r.sendBody("{\"error\":\"Unauthorized: Only God users can view action logs\"}") catch {};
+        return;
+    }
+
+    const logs_db = router.getLogsDatabase() orelse {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Logging database not available\"}") catch {};
+        return;
+    };
+    const allocator = router.getAllocator() orelse {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Allocator not available\"}") catch {};
+        return;
+    };
+
+    // Parse query parameters
+    var filters = logs_service.LogFilters{};
+
+    if (r.getParamSlice("userId")) |v| filters.user_id = v;
+    if (r.getParamSlice("action")) |v| filters.action = v;
+    if (r.getParamSlice("resourceType")) |v| filters.resource_type = v;
+    if (r.getParamSlice("resourceId")) |v| filters.resource_id = v;
+    if (r.getParamSlice("teamId")) |v| filters.team_id = v;
+    if (r.getParamSlice("companyId")) |v| filters.company_id = v;
+    if (r.getParamSlice("impersonatedBy")) |v| filters.impersonated_by = v;
+    if (r.getParamSlice("success")) |v| {
+        filters.success = std.mem.eql(u8, v, "true");
+    }
+    if (r.getParamSlice("startDate")) |v| filters.start_date = v;
+    if (r.getParamSlice("endDate")) |v| filters.end_date = v;
+    if (r.getParamSlice("page")) |v| {
+        filters.page = std.fmt.parseInt(u32, v, 10) catch 1;
+    }
+    if (r.getParamSlice("limit")) |v| {
+        const lim = std.fmt.parseInt(u32, v, 10) catch 50;
+        filters.limit = @min(lim, 100);
+    }
+
+    // Query logs
+    var result = logs_service.queryLogs(allocator, logs_db, filters) catch |err| {
+        log.err("Failed to query logs: {any}", .{err});
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Failed to query logs\"}") catch {};
+        return;
+    };
+    defer result.deinit(allocator);
+
+    // Serialize response
+    const json = json_util.serializeLogsResponse(allocator, result.items.items, filters.page, result.has_more) catch |err| {
+        log.err("Failed to serialize logs: {any}", .{err});
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Failed to serialize response\"}") catch {};
+        return;
+    };
+    defer allocator.free(json);
+
+    r.setContentType(.JSON) catch {};
+    r.sendBody(json) catch {};
 }

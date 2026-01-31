@@ -432,3 +432,119 @@ pub fn serializeProjectArray(allocator: std.mem.Allocator, projects: anytype) ![
 
     return try json.toOwnedSlice(allocator);
 }
+
+/// Serialize a single action log row (StringHashMap) to JSON
+pub fn serializeActionLog(allocator: std.mem.Allocator, row: std.StringHashMap([]const u8)) ![]const u8 {
+    var json = std.ArrayList(u8).initCapacity(allocator, 512) catch return error.OutOfMemory;
+    errdefer json.deinit(allocator);
+    var writer = json.writer(allocator);
+
+    // Helper to get value or empty string
+    const get = struct {
+        fn f(r: std.StringHashMap([]const u8), key: []const u8) []const u8 {
+            return r.get(key) orelse "";
+        }
+    }.f;
+
+    // Required fields
+    const id_esc = try escapeJson(allocator, get(row, "id"));
+    defer allocator.free(id_esc);
+    const user_id_esc = try escapeJson(allocator, get(row, "user_id"));
+    defer allocator.free(user_id_esc);
+    const action_esc = try escapeJson(allocator, get(row, "action"));
+    defer allocator.free(action_esc);
+    const method_esc = try escapeJson(allocator, get(row, "method"));
+    defer allocator.free(method_esc);
+    const path_esc = try escapeJson(allocator, get(row, "path"));
+    defer allocator.free(path_esc);
+
+    // success: stored as "0"/"1" integer string
+    const success_raw = get(row, "success");
+    const success = !std.mem.eql(u8, success_raw, "0");
+
+    try writer.print(
+        \\{{"id":"{s}","user_id":"{s}","action":"{s}","method":"{s}","path":"{s}","success":{s},"created_at":{s}
+    , .{
+        id_esc,
+        user_id_esc,
+        action_esc,
+        method_esc,
+        path_esc,
+        if (success) "true" else "false",
+        if (get(row, "created_at").len > 0) get(row, "created_at") else "0",
+    });
+
+    // Optional string fields
+    const optional_fields = [_]struct { key: []const u8, json_name: []const u8 }{
+        .{ .key = "user_email", .json_name = "user_email" },
+        .{ .key = "user_name", .json_name = "user_name" },
+        .{ .key = "impersonated_by", .json_name = "impersonated_by" },
+        .{ .key = "impersonation_type", .json_name = "impersonation_type" },
+        .{ .key = "impersonation_entity_id", .json_name = "impersonation_entity_id" },
+        .{ .key = "resource_type", .json_name = "resource_type" },
+        .{ .key = "resource_id", .json_name = "resource_id" },
+        .{ .key = "ip_address", .json_name = "ip_address" },
+        .{ .key = "user_agent", .json_name = "user_agent" },
+        .{ .key = "team_id", .json_name = "team_id" },
+        .{ .key = "company_id", .json_name = "company_id" },
+        .{ .key = "error_message", .json_name = "error_message" },
+    };
+
+    for (optional_fields) |field| {
+        const val = get(row, field.key);
+        if (val.len > 0) {
+            const val_esc = try escapeJson(allocator, val);
+            defer allocator.free(val_esc);
+            try writer.print(",\"{s}\":\"{s}\"", .{ field.json_name, val_esc });
+        } else {
+            try writer.print(",\"{s}\":null", .{field.json_name});
+        }
+    }
+
+    // metadata and request_body are raw JSON — emit unescaped
+    const metadata = get(row, "metadata");
+    if (metadata.len > 0 and !std.mem.eql(u8, metadata, "null")) {
+        try writer.print(",\"metadata\":{s}", .{metadata});
+    } else {
+        try writer.print(",\"metadata\":{{}}", .{});
+    }
+
+    const request_body = get(row, "request_body");
+    if (request_body.len > 0 and !std.mem.eql(u8, request_body, "null")) {
+        try writer.print(",\"request_body\":{s}", .{request_body});
+    } else {
+        try writer.print(",\"request_body\":null", .{});
+    }
+
+    try writer.print("}}", .{});
+
+    return try json.toOwnedSlice(allocator);
+}
+
+/// Serialize logs response with pagination: {"data":[...],"pagination":{"page":N,"hasMore":bool}}
+pub fn serializeLogsResponse(
+    allocator: std.mem.Allocator,
+    rows: anytype,
+    page: u32,
+    has_more: bool,
+) ![]const u8 {
+    var json = std.ArrayList(u8).initCapacity(allocator, 1024) catch return error.OutOfMemory;
+    errdefer json.deinit(allocator);
+    var writer = json.writer(allocator);
+
+    try writer.print("{{\"data\":[", .{});
+
+    for (rows, 0..) |row, i| {
+        if (i > 0) try writer.print(",", .{});
+        const log_json = try serializeActionLog(allocator, row);
+        defer allocator.free(log_json);
+        try writer.print("{s}", .{log_json});
+    }
+
+    try writer.print("],\"pagination\":{{\"page\":{d},\"hasMore\":{s}}}}}", .{
+        page,
+        if (has_more) "true" else "false",
+    });
+
+    return try json.toOwnedSlice(allocator);
+}

@@ -13,12 +13,21 @@ const log = std.log.scoped(.router);
 
 // Global state (in real implementation, use proper context passing)
 var global_db: ?*database.Database = null;
+var global_logs_db: ?*database.Database = null;
 var global_allocator: ?std.mem.Allocator = null;
 var global_static_dir: ?[]const u8 = null;
 
 pub fn setContext(db: *database.Database, allocator: std.mem.Allocator) void {
     global_db = db;
     global_allocator = allocator;
+}
+
+pub fn setLogsDb(db: *database.Database) void {
+    global_logs_db = db;
+}
+
+pub fn getLogsDatabase() ?*sqlite.sqlite3 {
+    return if (global_logs_db) |db| db.getConnection() else null;
 }
 
 pub fn setStaticDir(allocator: std.mem.Allocator, dir: []const u8) void {
@@ -98,8 +107,19 @@ fn handleRequest(r: zap.Request) !void {
     }
 
     // Agent WebSocket upgrade (requires agent headers)
-    if (std.mem.eql(u8, path, "/api/agent")) {
+    if (std.mem.startsWith(u8, path, "/api/agent")) {
+        log.info("ROUTER: Matching /api/agent. Path='{s}'", .{path});
+        // Log all headers for debugging
+        if (false) { // Toggle to true if needed
+            // zap doesn't expose iterator easily for headers in high-level API?
+        }
         api.handleAgentWebSocketUpgrade(r);
+        return;
+    }
+
+    // Frontend WebSocket upgrade
+    if (std.mem.eql(u8, path, "/ws")) {
+        api.handleWebSocketUpgrade(r);
         return;
     }
 
@@ -147,7 +167,9 @@ pub fn handleWebSocketOpen(context: ?*websocket.WsContext, handle: zap.WebSocket
     // Get server_id from context if set during upgrade
     var server_id: ?[]const u8 = null;
     if (context) |ws_ctx| {
-        server_id = allocator.dupe(u8, ws_ctx.server_id) catch null;
+        if (ws_ctx.server_id) |sid| {
+            server_id = allocator.dupe(u8, sid) catch null;
+        }
     }
 
     const conn = allocator.create(websocket.Connection) catch {
