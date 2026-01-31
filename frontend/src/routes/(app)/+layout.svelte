@@ -5,6 +5,8 @@
 	import { toastStore } from '$lib/stores/toast';
 	import { Button } from '$lib/components/ui/button';
 	import { LogOut, AlertTriangle } from '@lucide/svelte';
+	import { wsStore } from '$lib/stores/websocket';
+	import { browser } from '$app/environment';
 
 	let { data, children } = $props();
 
@@ -34,6 +36,31 @@
 		} else {
 			// No user - should not happen in (app) group, but handle gracefully
 			authStore.setLoading(false);
+		}
+	});
+
+	// WebSocket connection and updates
+	$effect(() => {
+		if (browser) {
+			wsStore.connect();
+		}
+	});
+
+	let lastHandledMessage = $state<any>(null);
+	$effect(() => {
+		const msg = $wsStore.lastMessage;
+		if (msg) {
+			// Svelte 5 proxy equality mismatch fix: compare by unique ID/timestamp
+			// The store now adds a timestamp to every message
+			if (!lastHandledMessage || msg.timestamp !== lastHandledMessage.timestamp) {
+				lastHandledMessage = msg;
+				if (msg.type === 'db_update') {
+					// Refresh data when relevant tables change
+					if (['servers', 'projects', 'deployments'].includes(msg.table)) {
+						invalidateAll();
+					}
+				}
+			}
 		}
 	});
 

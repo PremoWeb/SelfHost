@@ -15,7 +15,7 @@ pub const Session = struct {
     active_team_id: ?[]const u8,
     active_company_id: ?[]const u8,
     impersonated_by: ?[]const u8,
-    
+
     pub fn deinit(self: *Session, allocator: std.mem.Allocator) void {
         allocator.free(self.id);
         allocator.free(self.user_id);
@@ -24,7 +24,7 @@ pub const Session = struct {
         if (self.active_company_id) |cid| allocator.free(cid);
         if (self.impersonated_by) |ib| allocator.free(ib);
     }
-    
+
     pub fn fromRow(allocator: std.mem.Allocator, row: std.StringHashMap([]const u8)) !Session {
         return Session{
             .id = try allocator.dupe(u8, row.get("id") orelse return error.MissingField),
@@ -36,7 +36,7 @@ pub const Session = struct {
             .impersonated_by = if (row.get("impersonated_by")) |ib| try allocator.dupe(u8, ib) else null,
         };
     }
-    
+
     pub fn isExpired(self: *const Session) bool {
         const now = std.time.timestamp();
         return self.expires_at < now;
@@ -50,21 +50,21 @@ pub const User = struct {
     email_verified: bool,
     is_god: bool,
     image: ?[]const u8,
-    
+
     pub fn deinit(self: *User, allocator: std.mem.Allocator) void {
         allocator.free(self.id);
         allocator.free(self.name);
         allocator.free(self.email);
         if (self.image) |img| allocator.free(img);
     }
-    
+
     pub fn fromRow(allocator: std.mem.Allocator, row: std.StringHashMap([]const u8)) !User {
         const is_god_str = row.get("is_god") orelse "0";
         const is_god = std.mem.eql(u8, is_god_str, "1") or std.mem.eql(u8, is_god_str, "true");
-        
+
         const email_verified_str = row.get("email_verified") orelse "0";
         const email_verified = std.mem.eql(u8, email_verified_str, "1") or std.mem.eql(u8, email_verified_str, "true");
-        
+
         return User{
             .id = try allocator.dupe(u8, row.get("id") orelse return error.MissingField),
             .name = try allocator.dupe(u8, row.get("name") orelse return error.MissingField),
@@ -79,22 +79,22 @@ pub const User = struct {
 /// Get session by token from Authorization header
 pub fn getSessionByToken(allocator: std.mem.Allocator, db: *sqlite.sqlite3, token: []const u8) !?Session {
     // Extract token from "Bearer <token>" format
-    const actual_token = if (std.mem.startsWith(u8, token, "Bearer ")) 
-        token["Bearer ".len..] 
-    else 
+    const actual_token = if (std.mem.startsWith(u8, token, "Bearer "))
+        token["Bearer ".len..]
+    else
         token;
-    
+
     var sql_buf = std.ArrayList(u8).initCapacity(allocator, 256) catch return error.OutOfMemory;
     defer sql_buf.deinit(allocator);
-    
+
     // Escape token for SQL (in production, use parameterized queries)
     const token_escaped = try escapeSqlString(allocator, actual_token);
     defer allocator.free(token_escaped);
-    
+
     try sql_buf.writer(allocator).print("SELECT * FROM session WHERE token = '{s}' LIMIT 1", .{token_escaped});
     const query_str = try sql_buf.toOwnedSlice(allocator);
     defer allocator.free(query_str);
-    
+
     var rows = try query.queryAll(allocator, db, query_str);
     defer {
         for (rows.items) |*row| {
@@ -107,9 +107,9 @@ pub fn getSessionByToken(allocator: std.mem.Allocator, db: *sqlite.sqlite3, toke
         }
         rows.deinit(allocator);
     }
-    
+
     if (rows.items.len == 0) return null;
-    
+
     const session = try Session.fromRow(allocator, rows.items[0]);
     return session;
 }
@@ -118,14 +118,14 @@ pub fn getSessionByToken(allocator: std.mem.Allocator, db: *sqlite.sqlite3, toke
 pub fn getUserById(allocator: std.mem.Allocator, db: *sqlite.sqlite3, user_id: []const u8) !?User {
     var sql_buf = std.ArrayList(u8).initCapacity(allocator, 256) catch return error.OutOfMemory;
     defer sql_buf.deinit(allocator);
-    
+
     const user_id_escaped = try escapeSqlString(allocator, user_id);
     defer allocator.free(user_id_escaped);
-    
+
     try sql_buf.writer(allocator).print("SELECT * FROM users WHERE id = '{s}' LIMIT 1", .{user_id_escaped});
     const query_str = try sql_buf.toOwnedSlice(allocator);
     defer allocator.free(query_str);
-    
+
     var rows = try query.queryAll(allocator, db, query_str);
     defer {
         for (rows.items) |*row| {
@@ -138,9 +138,9 @@ pub fn getUserById(allocator: std.mem.Allocator, db: *sqlite.sqlite3, user_id: [
         }
         rows.deinit(allocator);
     }
-    
+
     if (rows.items.len == 0) return null;
-    
+
     const user = try User.fromRow(allocator, rows.items[0]);
     return user;
 }
@@ -178,14 +178,14 @@ pub fn getUsersList(allocator: std.mem.Allocator, db: *sqlite.sqlite3, limit: u3
 pub fn getAccountPassword(allocator: std.mem.Allocator, db: *sqlite.sqlite3, user_id: []const u8) !?[]const u8 {
     var sql_buf = std.ArrayList(u8).initCapacity(allocator, 256) catch return error.OutOfMemory;
     defer sql_buf.deinit(allocator);
-    
+
     const user_id_escaped = try escapeSqlString(allocator, user_id);
     defer allocator.free(user_id_escaped);
-    
+
     try sql_buf.writer(allocator).print("SELECT password FROM account WHERE user_id = '{s}' AND provider_id = 'credential' LIMIT 1", .{user_id_escaped});
     const query_str = try sql_buf.toOwnedSlice(allocator);
     defer allocator.free(query_str);
-    
+
     var rows = try query.queryAll(allocator, db, query_str);
     defer {
         for (rows.items) |*row| {
@@ -198,9 +198,9 @@ pub fn getAccountPassword(allocator: std.mem.Allocator, db: *sqlite.sqlite3, use
         }
         rows.deinit(allocator);
     }
-    
+
     if (rows.items.len == 0) return null;
-    
+
     const password = rows.items[0].get("password") orelse return null;
     return try allocator.dupe(u8, password);
 }
@@ -225,20 +225,14 @@ pub fn updateSessionTeam(allocator: std.mem.Allocator, db: *sqlite.sqlite3, sess
     if (team_id) |tid| {
         const tid_escaped = try escapeSqlString(allocator, tid);
         defer allocator.free(tid_escaped);
-        try sql_buf.writer(allocator).print(
-            "UPDATE session SET active_team_id = '{s}', updated_at = unixepoch() WHERE id = '{s}'",
-            .{ tid_escaped, session_id_escaped }
-        );
+        try sql_buf.writer(allocator).print("UPDATE session SET active_team_id = '{s}', updated_at = unixepoch() WHERE id = '{s}'", .{ tid_escaped, session_id_escaped });
     } else {
-        try sql_buf.writer(allocator).print(
-            "UPDATE session SET active_team_id = NULL, updated_at = unixepoch() WHERE id = '{s}'",
-            .{ session_id_escaped }
-        );
+        try sql_buf.writer(allocator).print("UPDATE session SET active_team_id = NULL, updated_at = unixepoch() WHERE id = '{s}'", .{session_id_escaped});
     }
-    
+
     const query_str = try sql_buf.toOwnedSlice(allocator);
     defer allocator.free(query_str);
-    
+
     try query.execute(allocator, db, query_str);
 }
 
@@ -247,40 +241,34 @@ pub fn createSession(allocator: std.mem.Allocator, db: *sqlite.sqlite3, user_id:
     const id = try generateUuid(allocator);
     const token = try generateToken(allocator);
     const expires_at = std.time.timestamp() + (30 * 24 * 60 * 60); // 30 days
-    
+
     // Get default team_id for user
     const team_id = try getDefaultTeamId(allocator, db, user_id);
     defer if (team_id) |tid| allocator.free(tid);
-    
+
     var sql_buf = std.ArrayList(u8).initCapacity(allocator, 512) catch return error.OutOfMemory;
     defer sql_buf.deinit(allocator);
-    
+
     const user_id_escaped = try escapeSqlString(allocator, user_id);
     defer allocator.free(user_id_escaped);
     const id_escaped = try escapeSqlString(allocator, id);
     defer allocator.free(id_escaped);
     const token_escaped = try escapeSqlString(allocator, token);
     defer allocator.free(token_escaped);
-    
+
     if (team_id) |tid| {
         const tid_escaped = try escapeSqlString(allocator, tid);
         defer allocator.free(tid_escaped);
-        try sql_buf.writer(allocator).print(
-            "INSERT INTO session (id, user_id, token, expires_at, active_team_id, created_at) VALUES ('{s}', '{s}', '{s}', {d}, '{s}', unixepoch())",
-            .{ id_escaped, user_id_escaped, token_escaped, expires_at, tid_escaped }
-        );
+        try sql_buf.writer(allocator).print("INSERT INTO session (id, user_id, token, expires_at, active_team_id, created_at) VALUES ('{s}', '{s}', '{s}', {d}, '{s}', unixepoch())", .{ id_escaped, user_id_escaped, token_escaped, expires_at, tid_escaped });
     } else {
-        try sql_buf.writer(allocator).print(
-            "INSERT INTO session (id, user_id, token, expires_at, created_at) VALUES ('{s}', '{s}', '{s}', {d}, unixepoch())",
-            .{ id_escaped, user_id_escaped, token_escaped, expires_at }
-        );
+        try sql_buf.writer(allocator).print("INSERT INTO session (id, user_id, token, expires_at, created_at) VALUES ('{s}', '{s}', '{s}', {d}, unixepoch())", .{ id_escaped, user_id_escaped, token_escaped, expires_at });
     }
-    
+
     const query_str = try sql_buf.toOwnedSlice(allocator);
     defer allocator.free(query_str);
-    
+
     try query.execute(allocator, db, query_str);
-    
+
     return Session{
         .id = id,
         .user_id = try allocator.dupe(u8, user_id),
@@ -298,13 +286,12 @@ fn generateUuid(allocator: std.mem.Allocator) ![]const u8 {
     // Rough UUID v4
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    
+
     return try std.fmt.allocPrint(allocator, "{x:0>2}{x:0>2}{x:0>2}{x:0>2}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}", .{
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5],
-        bytes[6], bytes[7],
-        bytes[8], bytes[9],
-        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
+        bytes[0],  bytes[1],  bytes[2],  bytes[3],
+        bytes[4],  bytes[5],  bytes[6],  bytes[7],
+        bytes[8],  bytes[9],  bytes[10], bytes[11],
+        bytes[12], bytes[13], bytes[14], bytes[15],
     });
 }
 
@@ -318,14 +305,14 @@ fn generateToken(allocator: std.mem.Allocator) ![]const u8 {
 fn getDefaultTeamId(allocator: std.mem.Allocator, db: *sqlite.sqlite3, user_id: []const u8) !?[]const u8 {
     var sql_buf = std.ArrayList(u8).initCapacity(allocator, 256) catch return error.OutOfMemory;
     defer sql_buf.deinit(allocator);
-    
+
     const user_id_escaped = try escapeSqlString(allocator, user_id);
     defer allocator.free(user_id_escaped);
-    
+
     try sql_buf.writer(allocator).print("SELECT team_id FROM team_members WHERE user_id = '{s}' LIMIT 1", .{user_id_escaped});
     const query_str = try sql_buf.toOwnedSlice(allocator);
     defer allocator.free(query_str);
-    
+
     var rows = try query.queryAll(allocator, db, query_str);
     defer {
         for (rows.items) |*row| {
@@ -338,7 +325,7 @@ fn getDefaultTeamId(allocator: std.mem.Allocator, db: *sqlite.sqlite3, user_id: 
         }
         rows.deinit(allocator);
     }
-    
+
     if (rows.items.len == 0) return null;
     return try allocator.dupe(u8, rows.items[0].get("team_id") orelse return null);
 }
@@ -365,23 +352,20 @@ pub fn resetPassword(allocator: std.mem.Allocator, db: *sqlite.sqlite3, user_id:
         .allocator = allocator,
         .params = std.crypto.pwhash.argon2.Params.owasp_2id,
     }, &hash_buf);
-    
+
     var sql_buf = std.ArrayList(u8).initCapacity(allocator, 512) catch return error.OutOfMemory;
     defer sql_buf.deinit(allocator);
-    
+
     const user_id_escaped = try escapeSqlString(allocator, user_id);
     defer allocator.free(user_id_escaped);
     const hash_escaped = try escapeSqlString(allocator, hash);
     defer allocator.free(hash_escaped);
-    
-    try sql_buf.writer(allocator).print(
-        "UPDATE account SET password = '{s}', updated_at = unixepoch() WHERE user_id = '{s}' AND provider_id = 'credential'",
-        .{ hash_escaped, user_id_escaped }
-    );
-    
+
+    try sql_buf.writer(allocator).print("UPDATE account SET password = '{s}', updated_at = unixepoch() WHERE user_id = '{s}' AND provider_id = 'credential'", .{ hash_escaped, user_id_escaped });
+
     const query_str = try sql_buf.toOwnedSlice(allocator);
     defer allocator.free(query_str);
-    
+
     try query.execute(allocator, db, query_str);
 }
 
@@ -394,19 +378,26 @@ pub fn extractTokenFromHeaders(allocator: std.mem.Allocator, headers: anytype) !
             return try allocator.dupe(u8, token);
         }
     }
-    
-    // Try cookie (Better Auth uses cookies). HTTP sends "Cookie" (capital C).
-    const cookie_header = headers.get("cookie") orelse headers.get("Cookie") orelse return null;
+
+    // Try cookie (session cookie name is 'session')
+    const cookie_header = headers.get("cookie") orelse headers.get("Cookie") orelse {
+        log.warn("No cookie header found", .{});
+        return null;
+    };
     // Parse cookie string for session token
-    // Better Auth uses "better-auth.session_token=<token>"
     var cookies = std.mem.splitSequence(u8, cookie_header, ";");
     while (cookies.next()) |cookie| {
         const trimmed = std.mem.trim(u8, cookie, " ");
+        if (std.mem.startsWith(u8, trimmed, "session=")) {
+            const token = trimmed["session=".len..];
+            return try allocator.dupe(u8, token);
+        }
         if (std.mem.startsWith(u8, trimmed, "better-auth.session_token=")) {
             const token = trimmed["better-auth.session_token=".len..];
             return try allocator.dupe(u8, token);
         }
     }
+    log.warn("No session cookie found. Cookie header: {s}", .{cookie_header});
     return null;
 }
 
@@ -414,7 +405,7 @@ pub fn extractTokenFromHeaders(allocator: std.mem.Allocator, headers: anytype) !
 fn escapeSqlString(allocator: std.mem.Allocator, str: []const u8) ![]const u8 {
     var result = std.ArrayList(u8).initCapacity(allocator, 256) catch return error.OutOfMemory;
     errdefer result.deinit(allocator);
-    
+
     for (str) |char| {
         switch (char) {
             '\'' => try result.writer(allocator).print("''", .{}), // SQL escape single quote
@@ -422,6 +413,6 @@ fn escapeSqlString(allocator: std.mem.Allocator, str: []const u8) ![]const u8 {
             else => try result.append(allocator, char),
         }
     }
-    
+
     return try result.toOwnedSlice(allocator);
 }

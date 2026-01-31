@@ -675,3 +675,70 @@ pub fn serializeSshKeyArray(allocator: std.mem.Allocator, keys: anytype) ![]cons
     try writer.writeAll("]}");
     return try json.toOwnedSlice(allocator);
 }
+
+/// Serialize Nameserver Profile to JSON
+pub fn serializeNameserverProfile(allocator: std.mem.Allocator, profile: anytype) ![]const u8 {
+    var json = std.ArrayList(u8).initCapacity(allocator, 384) catch return error.OutOfMemory;
+    errdefer json.deinit(allocator);
+    var writer = json.writer(allocator);
+
+    const name_escaped = try escapeJson(allocator, profile.name);
+    defer allocator.free(name_escaped);
+
+    try writer.print(
+        "{{\"id\":\"{s}\",\"name\":\"{s}\",\"ns1\":\"{s}\"",
+        .{ profile.id, name_escaped, profile.ns1 },
+    );
+
+    if (profile.ns2) |ns| {
+        try writer.print(",\"ns2\":\"{s}\"", .{ns});
+    }
+    if (profile.ns3) |ns| {
+        try writer.print(",\"ns3\":\"{s}\"", .{ns});
+    }
+    if (profile.ns4) |ns| {
+        try writer.print(",\"ns4\":\"{s}\"", .{ns});
+    }
+
+    try writer.print(",\"team_id\":\"{s}\"", .{profile.team_id});
+
+    if (profile.dns_provider_id) |pid| {
+        try writer.print(",\"dnsProviderId\":\"{s}\"", .{pid});
+    } else {
+        try writer.writeAll(",\"dnsProviderId\":null");
+    }
+
+    if (profile.dns_provider) |prov| {
+        // Embed simple provider object { "id": "...", "name": "..." }
+        const pname_esc = try escapeJson(allocator, prov.name);
+        defer allocator.free(pname_esc);
+        try writer.print(",\"dnsProvider\":{{\"id\":\"{s}\",\"name\":\"{s}\"}}", .{ prov.id, pname_esc });
+    } else {
+        try writer.writeAll(",\"dnsProvider\":null");
+    }
+
+    try writer.print(
+        ",\"created_at\":{d},\"updated_at\":{d}",
+        .{ profile.created_at, profile.updated_at },
+    );
+
+    try writer.writeAll("}}");
+    return try json.toOwnedSlice(allocator);
+}
+
+/// Serialize Nameserver Profile array to JSON
+pub fn serializeNameserverProfileArray(allocator: std.mem.Allocator, profiles: anytype) ![]const u8 {
+    var json = std.ArrayList(u8).initCapacity(allocator, 256) catch return error.OutOfMemory;
+    errdefer json.deinit(allocator);
+    var writer = json.writer(allocator);
+
+    try writer.writeAll("{\"data\":[");
+    for (profiles.items, 0..) |profile, i| {
+        if (i > 0) try writer.writeAll(",");
+        const p_json = try serializeNameserverProfile(allocator, profile);
+        defer allocator.free(p_json);
+        try writer.print("{s}", .{p_json});
+    }
+    try writer.writeAll("]}");
+    return try json.toOwnedSlice(allocator);
+}

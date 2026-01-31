@@ -10,16 +10,16 @@ const permissions = @import("permissions.zig");
 const log = std.log.scoped(.auth_middleware);
 
 // Simple header wrapper for Zap requests
-const HeaderWrapper = struct {
+pub const HeaderWrapper = struct {
     request: *const zap.Request,
-    
+
     pub fn get(self: *const HeaderWrapper, name: []const u8) ?[]const u8 {
         // Zap Request provides getHeader() method
         // Try case-insensitive header lookup
         if (self.request.getHeader(name)) |header_value| {
             return header_value;
         }
-        
+
         // Try lowercase version (HTTP headers are case-insensitive)
         var lower_name_buf: [64]u8 = undefined;
         if (name.len <= lower_name_buf.len) {
@@ -31,7 +31,7 @@ const HeaderWrapper = struct {
                 return header_value;
             }
         }
-        
+
         return null;
     }
 };
@@ -43,7 +43,7 @@ pub const RequestContext = struct {
     company_id: ?[]const u8,
     is_god: bool,
     allocator: std.mem.Allocator,
-    
+
     pub fn deinit(self: *RequestContext) void {
         if (self.user) |*u| u.deinit(self.allocator);
         if (self.session) |*s| s.deinit(self.allocator);
@@ -68,7 +68,7 @@ pub fn extractAuthContext(
         .allocator = allocator,
     };
     errdefer ctx.deinit();
-    
+
     // Extract token from request headers (catch so we never 500 from auth extraction)
     const headers = HeaderWrapper{ .request = request };
     const token = session.extractTokenFromHeaders(allocator, headers) catch |err| {
@@ -78,7 +78,7 @@ pub fn extractAuthContext(
         return ctx; // No token, return empty context
     };
     defer allocator.free(token);
-    
+
     // Get session by token (catch DB/query errors so we return 401 instead of 500)
     const sess = session.getSessionByToken(allocator, db, token) catch |err| {
         log.warn("getSessionByToken failed: {any}", .{err});
@@ -106,7 +106,7 @@ pub fn extractAuthContext(
     };
     ctx.user = user;
     ctx.is_god = user.is_god;
-    
+
     // Extract team and company from session (catch so we never 500)
     if (ctx.session.?.active_team_id) |tid| {
         ctx.team_id = allocator.dupe(u8, tid) catch |err| {
@@ -121,6 +121,8 @@ pub fn extractAuthContext(
         };
     }
 
+    log.info("Auth info: Token={s} SessionID={s} UserID={s} IsGod={any}", .{ token, ctx.session.?.id, ctx.user.?.id, ctx.is_god });
+
     return ctx;
 }
 
@@ -129,19 +131,19 @@ pub fn requireAuth(ctx: *RequestContext) !void {
     if (ctx.user == null) {
         return error.Unauthorized;
     }
-    
+
     const user = ctx.user.?;
-    
+
     // God users are always authorized
     if (user.is_god) {
         return;
     }
-    
+
     // Users with teams are authorized
     if (ctx.team_id != null) {
         return;
     }
-    
+
     // TODO: Check super_admin via Casbin
     // For now, require team
     return error.Unauthorized;

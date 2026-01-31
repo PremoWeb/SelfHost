@@ -20,17 +20,19 @@ pub const UpdateEvent = struct {
 };
 
 // Global event channel for broadcasting updates
-// TODO: Replace with proper channel implementation for Zig 0.15.2
-// For now, using a simple flag to disable realtime features
+// Event queue for buffering updates
+var event_queue: std.ArrayList(UpdateEvent) = undefined;
+var queue_mutex: std.Thread.Mutex = .{};
+var queue_cond: std.Thread.Condition = .{};
 var allocator_global: ?std.mem.Allocator = null;
 var realtime_enabled: bool = false;
+var update_thread: ?std.Thread = null;
 
 /// Initialize real-time update hooks
 pub fn init(alloc: std.mem.Allocator, db: *sqlite.sqlite3) !void {
     allocator_global = alloc;
-    // TODO: Implement proper channel for Zig 0.15.2
-    // For now, realtime is disabled until we implement the channel
-    realtime_enabled = false;
+    event_queue = std.ArrayList(UpdateEvent).initCapacity(alloc, 8) catch return;
+    realtime_enabled = true;
 
     // Register update hook callback
     _ = sqlite.sqlite3_update_hook(
@@ -42,8 +44,7 @@ pub fn init(alloc: std.mem.Allocator, db: *sqlite.sqlite3) !void {
     log.info("SQLite update hooks registered", .{});
 
     // Start background thread to process events
-    const thread = try std.Thread.spawn(.{}, processEvents, .{});
-    thread.detach();
+    update_thread = try std.Thread.spawn(.{}, processEvents, .{});
 }
 
 /// SQLite update hook callback
@@ -76,16 +77,62 @@ fn updateHookCallback(
         .rowid = rowid,
     };
 
-    // TODO: Send to channel when implemented
-    _ = event;
-    allocator_global.?.free(table_owned);
+    // Push to queue protected by mutex
+    queue_mutex.lock();
+    event_queue.append(allocator_global.?, event) catch |err| {
+        log.err("Failed to append event to queue: {any}", .{err});
+        allocator_global.?.free(table_owned);
+    };
+    queue_mutex.unlock();
+
+    // Signal processing thread
+    queue_cond.signal();
 }
 
 /// Background thread to process update events and broadcast via WebSocket
-/// TODO: Re-implement when channel is available
 fn processEvents() void {
-    // Disabled until channel is implemented
-    _ = realtime_enabled;
+    if (!realtime_enabled) return;
+    const alloc = allocator_global orelse return;
+
+    var local_queue = std.ArrayList(UpdateEvent).initCapacity(alloc, 8) catch return;
+    defer local_queue.deinit(alloc);
+
+    while (realtime_enabled) {
+        queue_mutex.lock();
+
+        // Wait for events
+        while (event_queue.items.len == 0 and realtime_enabled) {
+            queue_cond.wait(&queue_mutex);
+        }
+
+        if (!realtime_enabled) {
+            queue_mutex.unlock();
+            break;
+        }
+
+        // Swap queues to minimize lock time
+        local_queue.appendSlice(alloc, event_queue.items) catch {};
+        event_queue.clearRetainingCapacity();
+
+        queue_mutex.unlock();
+
+        // Process events
+        for (local_queue.items) |event| {
+            // Only broadcast updates for relevant tables
+            if (std.mem.eql(u8, event.table, "servers") or
+                std.mem.eql(u8, event.table, "projects") or
+                std.mem.eql(u8, event.table, "deployments"))
+            {
+                broadcastUpdate(event) catch |err| {
+                    log.err("Failed to broadcast update: {any}", .{err});
+                };
+            }
+
+            // Free memory (use local alloc; allocator_global may be null during shutdown)
+            alloc.free(event.table);
+        }
+        local_queue.clearRetainingCapacity();
+    }
 }
 
 /// Broadcast update event to all WebSocket connections
@@ -115,5 +162,24 @@ fn broadcastUpdate(event: UpdateEvent) !void {
 /// Deinitialize real-time hooks
 pub fn deinit() void {
     realtime_enabled = false;
-    allocator_global = null;
+    queue_mutex.lock();
+    queue_cond.signal(); // Wake up thread to exit
+    queue_mutex.unlock();
+
+    // Join thread
+    if (update_thread) |th| {
+        th.join();
+        update_thread = null;
+    }
+
+    if (allocator_global) |alloc| {
+        queue_mutex.lock();
+        // Free remaining items
+        for (event_queue.items) |event| {
+            alloc.free(event.table);
+        }
+        event_queue.deinit(alloc);
+        queue_mutex.unlock();
+        allocator_global = null;
+    }
 }

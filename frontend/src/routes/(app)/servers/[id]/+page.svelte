@@ -98,6 +98,25 @@
 
 	// Check if server is ready to be managed (has SSH key or agent installed)
 	let isServerReady = $derived(server?.privateKeyId != null || server?.connectionType === 'agent');
+
+	// Reactive "last seen" text — updates every second
+	let now = $state(Date.now());
+	$effect(() => {
+		const tick = setInterval(() => (now = Date.now()), 1000);
+		return () => clearInterval(tick);
+	});
+	let lastSeenText = $derived.by(() => {
+		const ts = server?.healthUpdatedAt;
+		if (!ts) return null;
+		const secs = Math.max(0, Math.floor((now - ts * 1000) / 1000));
+		if (secs < 60) return `${secs}s ago`;
+		const mins = Math.floor(secs / 60);
+		if (mins < 60) return `${mins}m ago`;
+		const hrs = Math.floor(mins / 60);
+		if (hrs < 24) return `${hrs}h ago`;
+		const days = Math.floor(hrs / 24);
+		return `${days}d ago`;
+	});
 	let notReadyMessage = $derived(
 		!server?.privateKeyId && server?.connectionType !== 'agent'
 			? 'Attach a deployment key or install the agent to manage this server'
@@ -1124,6 +1143,14 @@
 						</div>
 					</div>
 
+					{#if server.connectionType === 'agent' && server.status === 'waiting'}
+						<div class="rounded-lg border border-amber-200 bg-amber-500/10 px-4 py-3">
+							<p class="text-amber-800 dark:text-amber-200 text-sm font-medium">
+								Agent hasn't connected yet. Run <strong>Run diagnostics</strong> below to check the service and logs on the server (over SSH). If the agent was installed before recent fixes, <strong>Reinstall Agent</strong> to apply the latest fixes (Bun path, etc.).
+							</p>
+						</div>
+					{/if}
+
 					{#if server.connectionType === 'agent'}
 						<div
 							class="bg-muted/20 hidden items-center gap-6 rounded-full border px-6 py-2 lg:flex"
@@ -1170,6 +1197,12 @@
 									></div>
 								</div>
 							</div>
+							{#if lastSeenText}
+								<div class="border-l pl-4 flex flex-col items-center gap-0.5">
+									<span class="text-muted-foreground text-[10px] font-bold tracking-wider uppercase">Seen</span>
+									<span class="text-xs tabular-nums">{lastSeenText}</span>
+								</div>
+							{/if}
 						</div>
 					{/if}
 
@@ -2085,10 +2118,48 @@
 														<TerminalIcon class="mr-2 size-4" />
 														View Live Logs
 													</Button>
+
+													<Button
+														type="button"
+														variant="outline"
+														class="w-full"
+														disabled={isDiagnosing}
+														onclick={handleDiagnose}
+													>
+														{#if isDiagnosing}
+															<Activity class="mr-2 size-4 animate-pulse" />
+															Running...
+														{:else}
+															<Activity class="mr-2 size-4" />
+															Run diagnostics
+														{/if}
+													</Button>
 												{/if}
 											</div>
 										</div>
 									</div>
+									{#if server.privateKeyId && server.connectionType !== 'agent'}
+										<div class="mt-4 rounded-lg border border-amber-200 bg-amber-500/5 p-3">
+											<p class="text-muted-foreground mb-2 text-xs">
+												Agent not online? Run diagnostics to check the service and logs on the server (over SSH).
+											</p>
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												disabled={isDiagnosing}
+												onclick={handleDiagnose}
+											>
+												{#if isDiagnosing}
+													<Activity class="mr-2 size-4 animate-pulse" />
+													Running...
+												{:else}
+													<Activity class="mr-2 size-4" />
+													Run diagnostics
+												{/if}
+											</Button>
+										</div>
+									{/if}
 
 									{#if server.connectionType === 'agent'}
 										<div class="mt-8 border-t pt-6">

@@ -1,0 +1,27 @@
+install
++- install selfhost-server
+   +- compile exe selfhost-server Debug native 2 errors
+src/api.zig:2872:68: error: value of type 'bool' ignored
+    nameserver_profiles_service.delete(allocator, db, id, team_id) catch |err| {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+src/api.zig:2872:68: note: all non-void values must be used
+src/api.zig:2872:68: note: to discard the value, assign it to '_'
+referenced by:
+    handleApiRequest: src/api.zig:949:46
+    handleRequest: src/router.zig:146:29
+    8 reference(s) hidden; use '-freference-trace=10' to see all references
+src/api.zig:2897:72: error: value of type 'bool' ignored
+    nameserver_profiles_service.setDefault(allocator, db, team_id, id) catch |err| {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+src/api.zig:2897:72: note: all non-void values must be used
+src/api.zig:2897:72: note: to discard the value, assign it to '_'
+error: the following command failed with 2 compilation errors:
+/usr/bin/zig build-exe .zig-cache/o/3932e99802e25c504695407ef72464ce/libfacil.io.a -lsqlite3 -ODebug -I .zig-cache/o/a6fb089e932f705ef1065695b36c6e90 --dep zap -Mroot=/home/nick/Projects/selfhost/zig/src/main.zig .zig-cache/o/3932e99802e25c504695407ef72464ce/libfacil.io.a -ODebug -I .zig-cache/o/a6fb089e932f705ef1065695b36c6e90 -Mzap=/home/nick/.cache/zig/p/zap-0.10.6-GoeB8w-EJABTkxyoGH_Z8oMBYMxTBvn7YWk-DrJOHuDO/src/zap.zig -lc++ -lc --cache-dir .zig-cache --global-cache-dir /home/nick/.cache/zig --name selfhost-server --zig-lib-dir /usr/lib/zig/ --listen=-
+
+Build Summary: 2/5 steps succeeded; 1 failed
+install transitive failure
++- install selfhost-server transitive failure
+   +- compile exe selfhost-server Debug native 2 errors
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/44268bcb4536e6f073b132543a10f547/build /usr/bin/zig /usr/lib/zig /home/nick/Projects/selfhost/zig .zig-cache /home/nick/.cache/zig --seed 0x6949d3c4 -Z05c750044c6c22ec

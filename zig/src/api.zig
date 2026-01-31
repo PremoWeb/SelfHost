@@ -23,6 +23,10 @@ const session = @import("auth/session.zig");
 const dev_tunnel = @import("dev_tunnel.zig");
 const vultr = @import("vultr.zig");
 const logs_service = @import("services/logs.zig");
+const git_service = @import("services/git.zig");
+const git_handlers = @import("git_handlers.zig");
+
+const nameserver_profiles_service = @import("services/nameserver_profiles.zig");
 
 const log = std.log.scoped(.api);
 
@@ -578,7 +582,7 @@ fn getTeamById(allocator: std.mem.Allocator, db: *sqlite.sqlite3, team_id: []con
     defer allocator.free(tid_escaped);
     var sql_buf = std.ArrayList(u8).initCapacity(allocator, 256) catch return null;
     defer sql_buf.deinit(allocator);
-    sql_buf.writer(allocator).print("SELECT id, name, description, personal_team, created_at, updated_at FROM teams WHERE id = '{s}' LIMIT 1", .{tid_escaped}) catch return null;
+    sql_buf.writer(allocator).print("SELECT id, name, description, personal_team, default_nameserver_profile_id, created_at, updated_at FROM teams WHERE id = '{s}' LIMIT 1", .{tid_escaped}) catch return null;
     const query_str = sql_buf.toOwnedSlice(allocator) catch return null;
     defer allocator.free(query_str);
     var rows = query_mod.queryAll(allocator, db, query_str) catch return null;
@@ -616,6 +620,7 @@ fn formatTeamJson(allocator: std.mem.Allocator, row: std.StringHashMap([]const u
     const personal_team = row.get("personal_team");
     const created_at = row.get("created_at") orelse "0";
     const updated_at = row.get("updated_at") orelse "0";
+    const default_ns_profile_id = row.get("default_nameserver_profile_id");
     const personal = personal_team != null and (std.mem.eql(u8, personal_team.?, "1") or std.mem.eql(u8, personal_team.?, "true"));
     const id_escaped = json_util.escapeJson(allocator, id) catch return error.OutOfMemory;
     defer allocator.free(id_escaped);
@@ -630,7 +635,17 @@ fn formatTeamJson(allocator: std.mem.Allocator, row: std.StringHashMap([]const u
             defer allocator.free(desc_json);
         }
     }
-    return std.fmt.allocPrint(allocator, "{{\"id\":\"{s}\",\"name\":\"{s}\",\"description\":{s},\"personalTeam\":{},\"createdAt\":{s},\"updatedAt\":{s}}}", .{ id_escaped, name_escaped, desc_json, personal, created_at, updated_at });
+
+    var dns_json: []const u8 = "null";
+    if (default_ns_profile_id) |d| {
+        if (d.len > 0) {
+            const escaped = json_util.escapeJson(allocator, d) catch return error.OutOfMemory;
+            defer allocator.free(escaped);
+            dns_json = std.fmt.allocPrint(allocator, "\"{s}\"", .{escaped}) catch return error.OutOfMemory;
+            defer allocator.free(dns_json);
+        }
+    }
+    return std.fmt.allocPrint(allocator, "{{\"id\":\"{s}\",\"name\":\"{s}\",\"description\":{s},\"personalTeam\":{},\"defaultNameserverProfileId\":{s},\"createdAt\":{s},\"updatedAt\":{s}}}", .{ id_escaped, name_escaped, desc_json, personal, dns_json, created_at, updated_at });
 }
 
 fn handleAuthSessionTeam(r: zap.Request, allocator: std.mem.Allocator, db: *sqlite.sqlite3) void {
@@ -792,6 +807,11 @@ pub fn handleApiRequest(r: zap.Request, path: []const u8, method: zap.http.Metho
         return;
     }
 
+    if (method == .GET and std.mem.eql(u8, path, "/api/nameserver-profiles")) {
+        handleNameserverProfiles(r, method, &ctx);
+        return;
+    }
+
     // All other API routes require authentication
     auth_middleware.requireAuth(&ctx) catch {
         r.setStatus(.unauthorized);
@@ -904,6 +924,53 @@ pub fn handleApiRequest(r: zap.Request, path: []const u8, method: zap.http.Metho
     }
     if (method == .GET and std.mem.eql(u8, path, "/api/logs")) {
         handleLogs(r, &ctx);
+        return;
+    }
+    if (std.mem.eql(u8, path, "/api/nameserver-profiles")) {
+        handleNameserverProfiles(r, method, &ctx);
+        return;
+    }
+    if (std.mem.startsWith(u8, path, "/api/nameserver-profiles/")) {
+        const id_and_suffix = path["/api/nameserver-profiles/".len..];
+        if (std.mem.indexOf(u8, id_and_suffix, "/")) |slash_index| {
+            // Suffix found (e.g. /set-default)
+            const id = id_and_suffix[0..slash_index];
+            const suffix = id_and_suffix[slash_index..];
+            if (std.mem.eql(u8, suffix, "/set-default") and method == .POST) {
+                handleNameserverProfileSetDefault(r, id, &ctx);
+            } else {
+                r.setStatus(.not_found);
+                r.sendBody("{\"error\":\"Not found\"}") catch {};
+            }
+        } else {
+            // No suffix, just delete by ID
+            const id = id_and_suffix;
+            if (method == .DELETE) {
+                handleNameserverProfileDelete(r, id, &ctx);
+            } else {
+                r.setStatus(.method_not_allowed);
+            }
+        }
+        return;
+    }
+
+    // Git API endpoints
+    if (std.mem.eql(u8, path, "/api/git/repositories")) {
+        git_handlers.handleGitRepositories(r, method, &ctx);
+        return;
+    }
+    if (std.mem.startsWith(u8, path, "/api/git/repositories/")) {
+        const id = path["/api/git/repositories/".len..];
+        git_handlers.handleGitRepositoryById(r, method, id, &ctx);
+        return;
+    }
+    if (std.mem.eql(u8, path, "/api/ssh/keys")) {
+        git_handlers.handleSshKeys(r, method, &ctx);
+        return;
+    }
+    if (std.mem.startsWith(u8, path, "/api/ssh/keys/")) {
+        const id = path["/api/ssh/keys/".len..];
+        git_handlers.handleSshKeyById(r, method, id, &ctx);
         return;
     }
 
@@ -2668,4 +2735,171 @@ fn handleLogs(r: zap.Request, ctx: *auth_middleware.RequestContext) void {
 
     r.setContentType(.JSON) catch {};
     r.sendBody(json) catch {};
+}
+
+fn handleNameserverProfiles(r: zap.Request, method: zap.http.Method, ctx: *auth_middleware.RequestContext) void {
+    const db = router.getDatabase() orelse {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Database not available\"}") catch {};
+        return;
+    };
+    const allocator = router.getAllocator() orelse {
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Allocator not available\"}") catch {};
+        return;
+    };
+    const team_id: ?[]const u8 = if (ctx.is_god) null else ctx.team_id;
+
+    switch (method) {
+        .GET => {
+            var profiles = nameserver_profiles_service.listByTeam(allocator, db, team_id) catch |err| {
+                log.err("Failed to list nameserver profiles: {any}", .{err});
+                r.setStatus(.internal_server_error);
+                r.sendBody("{\"error\":\"Failed to query profiles\"}") catch {};
+                return;
+            };
+            defer {
+                for (profiles.items) |*p| p.deinit(allocator);
+                profiles.deinit(allocator);
+            }
+            const json = json_util.serializeNameserverProfileArray(allocator, profiles) catch |err| {
+                log.err("Failed to serialize nameserver profiles: {any}", .{err});
+                r.setStatus(.internal_server_error);
+                r.sendBody("{\"error\":\"Failed to serialize\"}") catch {};
+                return;
+            };
+            defer allocator.free(json);
+            r.setContentType(.JSON) catch {};
+            r.sendBody(json) catch {};
+        },
+        .POST => {
+            const body_str = request_body.readRequestBody(allocator, r) catch {
+                r.setStatus(.bad_request);
+                r.sendBody("{\"message\":\"Failed to read body\"}") catch {};
+                return;
+            };
+            defer allocator.free(body_str);
+            if (body_str.len == 0) {
+                r.setStatus(.bad_request);
+                r.sendBody("{\"message\":\"Request body required\"}") catch {};
+                return;
+            }
+            const json_data = json_parser.parseJson(allocator, body_str) catch {
+                r.setStatus(.bad_request);
+                r.sendBody("{\"message\":\"Invalid JSON\"}") catch {};
+                return;
+            };
+            defer {
+                var it = json_data.iterator();
+                while (it.next()) |entry| {
+                    allocator.free(entry.key_ptr.*);
+                    allocator.free(entry.value_ptr.*);
+                }
+                @constCast(&json_data).deinit();
+            }
+
+            const name = json_parser.getString(json_data, allocator, "name") catch null;
+            defer if (name) |n| allocator.free(n);
+            const ns1 = json_parser.getString(json_data, allocator, "ns1") catch null;
+            defer if (ns1) |n| allocator.free(n);
+            const ns2 = json_parser.getString(json_data, allocator, "ns2") catch null;
+            defer if (ns2) |n| allocator.free(n);
+            const ns3 = json_parser.getString(json_data, allocator, "ns3") catch null;
+            defer if (ns3) |n| allocator.free(n);
+            const ns4 = json_parser.getString(json_data, allocator, "ns4") catch null;
+            defer if (ns4) |n| allocator.free(n);
+            const dns_provider_id = json_parser.getString(json_data, allocator, "dnsProviderId") catch null;
+            defer if (dns_provider_id) |p| allocator.free(p);
+
+            // Handle required fields
+            if (name == null or ns1 == null) {
+                r.setStatus(.bad_request);
+                r.sendBody("{\"message\":\"name and ns1 required\"}") catch {};
+                return;
+            }
+
+            // Ensure we have a team ID to assign to.
+            // If ctx.team_id is null, fail.
+            const create_tid = ctx.team_id orelse {
+                r.setStatus(.bad_request);
+                r.sendBody("{\"message\":\"No active team context\"}") catch {};
+                return;
+            };
+
+            var profile = nameserver_profiles_service.create(allocator, db, .{
+                .name = name.?,
+                .ns1 = ns1.?,
+                .ns2 = ns2,
+                .ns3 = ns3,
+                .ns4 = ns4,
+                .dns_provider_id = dns_provider_id,
+                .team_id = create_tid,
+            }) catch |err| {
+                log.err("Failed to create nameserver profile: {any}", .{err});
+                r.setStatus(.internal_server_error);
+                r.sendBody("{\"message\":\"Failed to create profile\"}") catch {};
+                return;
+            };
+            defer profile.deinit(allocator);
+
+            const json = json_util.serializeNameserverProfile(allocator, profile) catch |err| {
+                log.err("Failed to serialize nameserver profile: {any}", .{err});
+                r.setStatus(.internal_server_error);
+                r.sendBody("{\"error\":\"Failed to serialize response\"}") catch {};
+                return;
+            };
+            defer allocator.free(json);
+            r.setContentType(.JSON) catch {};
+            r.sendBody(json) catch {};
+        },
+        else => {
+            r.setStatus(.method_not_allowed);
+        },
+    }
+}
+
+fn handleNameserverProfileDelete(r: zap.Request, id: []const u8, ctx: *auth_middleware.RequestContext) void {
+    const db = router.getDatabase() orelse {
+        r.setStatus(.internal_server_error);
+        return;
+    };
+    const allocator = router.getAllocator() orelse {
+        r.setStatus(.internal_server_error);
+        return;
+    };
+    const team_id: ?[]const u8 = if (ctx.is_god) null else ctx.team_id;
+
+    _ = nameserver_profiles_service.delete(allocator, db, id, team_id) catch |err| {
+        log.err("Failed to delete nameserver profile: {any}", .{err});
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Failed to delete\"}") catch {};
+        return;
+    };
+    r.setContentType(.JSON) catch {};
+    r.sendBody("{\"success\":true}") catch {};
+}
+
+fn handleNameserverProfileSetDefault(r: zap.Request, id: []const u8, ctx: *auth_middleware.RequestContext) void {
+    const db = router.getDatabase() orelse {
+        r.setStatus(.internal_server_error);
+        return;
+    };
+    const allocator = router.getAllocator() orelse {
+        r.setStatus(.internal_server_error);
+        return;
+    };
+    const team_id: []const u8 = ctx.team_id orelse {
+        r.setStatus(.bad_request);
+        r.sendBody("{\"message\":\"No active team context\"}") catch {};
+        return;
+    };
+
+    _ = nameserver_profiles_service.setDefault(allocator, db, team_id, id) catch |err| {
+        log.err("Failed to set default nameserver profile: {any}", .{err});
+        r.setStatus(.internal_server_error);
+        r.sendBody("{\"error\":\"Failed to set default\"}") catch {};
+        return;
+    };
+    r.setContentType(.JSON) catch {};
+    r.sendBody("{\"success\":true}") catch {};
 }

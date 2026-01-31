@@ -27,7 +27,7 @@ SelfHost.gg is a modern alternative to platforms like Heroku, Netlify, and Verce
 
 > **Why Agent Instead of SSH?** The SelfHost Agent uses outbound WebSocket connections, eliminating the need for inbound SSH ports. It provides real-time monitoring, automatic reconnection, and works behind firewalls. [Learn more →](/docs/agent)
 
-SelfHost.gg features a high-performance **Full-Stack SvelteKit** architecture designed for a superior developer experience and real-time responsiveness.
+SelfHost.gg features a high-performance architecture separating a **Zig Backend** from a **SvelteKit Frontend** for superior performance, resource efficiency, and type safety.
 
 ## ✨ Key Features
 
@@ -44,8 +44,8 @@ SelfHost.gg features a high-performance **Full-Stack SvelteKit** architecture de
 
 ## 🛠️ Tech Stack
 
-- **Framework**: SvelteKit 2.x (Svelte 5 Runes)
-- **Runtime**: Bun 1.1.x
+- **Frontend**: SvelteKit 2.x (Svelte 5 Runes) + Bun
+- **Backend**: Zig 0.13.x (Zap Web Server)
 - **Database**: SQLite/LibSQL + Drizzle ORM
 - **Styling**: Tailwind CSS 4.x + Shadcn/Svelte
 - **Icons**: Lucide-svelte

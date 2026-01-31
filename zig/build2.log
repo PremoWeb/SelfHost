@@ -1,0 +1,29 @@
+install
++- install selfhost-server
+   +- compile exe selfhost-server Debug native 2 errors
+src/db/realtime.zig:97:22: error: member function expected 1 argument(s), found 0
+    defer local_queue.deinit();
+          ~~~~~~~~~~~^~~~~~~
+/usr/lib/zig/std/array_list.zig:654:13: note: function declared here
+        pub fn deinit(self: *Self, gpa: Allocator) void {
+        ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    callFn__anon_26664: /usr/lib/zig/std/Thread.zig:509:13
+    entryFn: /usr/lib/zig/std/Thread.zig:781:30
+    8 reference(s) hidden; use '-freference-trace=10' to see all references
+src/db/realtime.zig:175:20: error: member function expected 1 argument(s), found 0
+        event_queue.deinit();
+        ~~~~~~~~~~~^~~~~~~
+/usr/lib/zig/std/array_list.zig:654:13: note: function declared here
+        pub fn deinit(self: *Self, gpa: Allocator) void {
+        ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+error: the following command failed with 2 compilation errors:
+/usr/bin/zig build-exe .zig-cache/o/c4f001fdf1c293f47dc7ccc93daebee6/libfacil.io.a -lsqlite3 -ODebug -I .zig-cache/o/a6fb089e932f705ef1065695b36c6e90 --dep zap -Mroot=/home/nick/Projects/selfhost/zig/src/main.zig .zig-cache/o/c4f001fdf1c293f47dc7ccc93daebee6/libfacil.io.a -ODebug -I .zig-cache/o/a6fb089e932f705ef1065695b36c6e90 -Mzap=/home/nick/.cache/zig/p/zap-0.10.6-GoeB8w-EJABTkxyoGH_Z8oMBYMxTBvn7YWk-DrJOHuDO/src/zap.zig -lc++ -lc --cache-dir .zig-cache --global-cache-dir /home/nick/.cache/zig --name selfhost-server --zig-lib-dir /usr/lib/zig/ --listen=-
+
+Build Summary: 2/5 steps succeeded; 1 failed
+install transitive failure
++- install selfhost-server transitive failure
+   +- compile exe selfhost-server Debug native 2 errors
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/44268bcb4536e6f073b132543a10f547/build /usr/bin/zig /usr/lib/zig /home/nick/Projects/selfhost/zig .zig-cache /home/nick/.cache/zig --seed 0x14f015ff -Z5f662c58df1b7712

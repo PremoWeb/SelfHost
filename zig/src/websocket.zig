@@ -20,11 +20,11 @@ pub const Connection = struct {
 };
 
 pub const WsContext = struct {
-    server_id: []const u8,
+    server_id: ?[]const u8,
     allocator: std.mem.Allocator,
 
     pub fn deinit(self: *WsContext) void {
-        self.allocator.free(self.server_id);
+        if (self.server_id) |id| self.allocator.free(id);
         self.allocator.destroy(self);
     }
 };
@@ -48,7 +48,7 @@ pub fn addConnection(conn: *Connection) !void {
     if (!pool_initialized) {
         return error.PoolNotInitialized;
     }
-    
+
     connections_mutex.lock();
     defer connections_mutex.unlock();
 
@@ -60,10 +60,10 @@ pub fn addConnection(conn: *Connection) !void {
 /// Remove a connection from the pool
 pub fn removeConnection(conn: *Connection) void {
     if (!pool_initialized) return;
-    
+
     connections_mutex.lock();
     defer connections_mutex.unlock();
-    
+
     for (connections.items, 0..) |c, i| {
         if (c.id.ptr == conn.id.ptr) {
             _ = connections.swapRemove(i);
@@ -76,10 +76,10 @@ pub fn removeConnection(conn: *Connection) void {
 /// Broadcast a message to all connected WebSocket clients
 pub fn broadcast(message: []const u8) !void {
     if (!pool_initialized) return;
-    
+
     connections_mutex.lock();
     defer connections_mutex.unlock();
-    
+
     var failed: usize = 0;
     for (connections.items) |conn| {
         zap.WebSockets.Handler(void).write(conn.ws, message, true) catch |err| {
@@ -87,7 +87,7 @@ pub fn broadcast(message: []const u8) !void {
             failed += 1;
         };
     }
-    
+
     if (failed > 0) {
         log.warn("Failed to send to {d} connection(s)", .{failed});
     } else {
@@ -98,10 +98,10 @@ pub fn broadcast(message: []const u8) !void {
 /// Get connection count
 pub fn getConnectionCount() usize {
     if (!pool_initialized) return 0;
-    
+
     connections_mutex.lock();
     defer connections_mutex.unlock();
-    
+
     return connections.items.len;
 }
 
@@ -158,12 +158,12 @@ pub fn getConnectionByHandle(handle: zap.WebSockets.WsHandle) ?*Connection {
 /// Deinitialize connection pool
 pub fn deinitPool() void {
     if (!pool_initialized) return;
-    
+
     const allocator = global_allocator orelse return;
-    
+
     connections_mutex.lock();
     defer connections_mutex.unlock();
-    
+
     for (connections.items) |conn| {
         conn.deinit();
     }

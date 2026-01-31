@@ -1,0 +1,17 @@
+install
++- install selfhost-server
+   +- compile exe selfhost-server Debug native 1 errors
+src/services/files.zig:1:1: error: unable to load 'files.zig': FileNotFound
+src/api.zig:28:31: note: file imported here
+const files_service = @import("services/files.zig");
+                              ^~~~~~~~~~~~~~~~~~~~
+error: the following command failed with 1 compilation errors:
+/usr/bin/zig build-exe .zig-cache/o/3932e99802e25c504695407ef72464ce/libfacil.io.a -lsqlite3 -ODebug -I .zig-cache/o/a6fb089e932f705ef1065695b36c6e90 --dep zap -Mroot=/home/nick/Projects/selfhost/zig/src/main.zig .zig-cache/o/3932e99802e25c504695407ef72464ce/libfacil.io.a -ODebug -I .zig-cache/o/a6fb089e932f705ef1065695b36c6e90 -Mzap=/home/nick/.cache/zig/p/zap-0.10.6-GoeB8w-EJABTkxyoGH_Z8oMBYMxTBvn7YWk-DrJOHuDO/src/zap.zig -lc++ -lc --cache-dir .zig-cache --global-cache-dir /home/nick/.cache/zig --name selfhost-server --zig-lib-dir /usr/lib/zig/ --listen=-
+
+Build Summary: 2/5 steps succeeded; 1 failed
+install transitive failure
++- install selfhost-server transitive failure
+   +- compile exe selfhost-server Debug native 1 errors
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/44268bcb4536e6f073b132543a10f547/build /usr/bin/zig /usr/lib/zig /home/nick/Projects/selfhost/zig .zig-cache /home/nick/.cache/zig --seed 0xe594141d -Z1e9bcf9df7dc7df9

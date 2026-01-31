@@ -14,8 +14,19 @@ export const load: PageLoad = async ({ parent }) => {
 		const res = await api.get<{ data?: any[] }>('/servers');
 		const body = res.data as { data?: any[] } | any[] | undefined;
 		// Zig returns { data: [...] }; support direct array as fallback
-		const data = Array.isArray(body) ? body : body?.data;
-		const servers = Array.isArray(data) ? data : [];
+		const rawData = Array.isArray(body) ? body : body?.data;
+		const serversList = Array.isArray(rawData) ? rawData : [];
+
+		// Map snake_case to camelCase for mixed frontend usage
+		const servers = serversList.map((s: any) => ({
+			...s,
+			connectionType: s.connection_type,
+			healthCpu: s.health_cpu,
+			healthMemory: s.health_memory,
+			healthDisk: s.health_disk,
+			agentChecksum: s.agent_checksum,
+			providerName: s.provider_name
+		}));
 		return {
 			servers,
 			vpsProviders: [],

@@ -204,9 +204,7 @@
 	);
 
 	const filteredTeams = $derived(
-		data.teams
-			? data.teams.filter((t: any) => t.name?.toLowerCase().includes(searchQuery.toLowerCase()))
-			: []
+		(data.teams ?? []).filter((t: any) => t.name?.toLowerCase().includes(searchQuery.toLowerCase()))
 	);
 </script>
 
@@ -608,7 +606,7 @@
 													<Button variant="ghost" size="sm">
 														<Edit class="size-4" />
 													</Button>
-													{#if data.user.isGod}
+													{#if data.user?.isGod}
 														<Button variant="ghost" size="sm" class="text-destructive hover:text-destructive">
 															<Trash2 class="size-4" />
 														</Button>
@@ -642,7 +640,7 @@
 							<h2 class="text-2xl font-semibold">User Management</h2>
 							<p class="text-muted-foreground">Manage individual users, roles, and permissions.</p>
 						</div>
-						{#if data.user.isGod}
+						{#if data.user?.isGod}
 							<Button onclick={() => (showCreateUserDialog = true)}>
 								<Plus class="mr-2 size-4" />
 								Create User
@@ -735,7 +733,7 @@
 											</Table.Cell>
 											<Table.Cell class="text-right">
 												<div class="flex items-center justify-end gap-2">
-													{#if data.user.isGod && !user.isGod && user.id !== data.user.id}
+													{#if data.user?.isGod && !user.isGod && user.id !== data.user?.id}
 														<Button
 															variant="ghost"
 															size="sm"
@@ -751,7 +749,7 @@
 													}}>
 														<UserCog class="size-4" />
 													</Button>
-													{#if data.user.isGod && !user.isGod}
+													{#if data.user?.isGod && !user.isGod}
 														<Button variant="ghost" size="sm" class="text-destructive hover:text-destructive">
 															<Trash2 class="size-4" />
 														</Button>
