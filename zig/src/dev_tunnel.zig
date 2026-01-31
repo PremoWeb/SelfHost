@@ -38,14 +38,17 @@ fn tryRestoreTunnel(allocator: std.mem.Allocator) void {
 
     const pid = std.fmt.parseInt(i32, pid_str, 10) catch return;
 
-    // Check if process is still alive
-    const result = std.posix.waitpid(pid, std.posix.W.NOHANG);
-    if (result.pid == 0) {
-        // Process is still running, restore it
-        tunnel_url = allocator.dupe(u8, url_str) catch return;
-        log.info("Restored tunnel from previous instance: pid={d}, url={s}", .{ pid, url_str });
-        // Note: we don't restore tunnel_child because we don't own the process
-    }
+    // Check if process is still alive using kill(pid, 0)
+    // Sending signal 0 checks for existence without sending a signal
+    _ = std.posix.kill(pid, 0) catch |err| {
+        if (err == error.ProcessNotFound) return; // Process dead
+        return; // Other error (EPERM etc) - assume unusable
+    };
+
+    // If we get here, process exists
+    tunnel_url = allocator.dupe(u8, url_str) catch return;
+    log.info("Restored tunnel from previous instance: pid={d}, url={s}", .{ pid, url_str });
+    // Note: we don't restore tunnel_child because we don't own the process
 }
 
 /// Return current tunnel URL if running. Caller does not own the slice.

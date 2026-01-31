@@ -239,8 +239,9 @@ pub fn runInstallAgent(
     const init_system = lines.next() orelse "generic";
     const whoami_line = lines.next() orelse "";
     const sudo_line = lines.next() orelse "";
-    _ = lines.next() orelse "";
+    // Line 5 = path from "command -v bun" (when bun exists), line 6 = version from "bun -v"
     const bun_path_line = lines.next() orelse "";
+    _ = lines.next() orelse "";
 
     log.info("Detected: arch={s}, init={s}, user={s}, sudo={s}", .{ arch_line, init_system, whoami_line, sudo_line });
 
@@ -249,13 +250,14 @@ pub fn runInstallAgent(
     const is_root = std.mem.indexOf(u8, whoami_line, "root") != null;
     const has_sudo = std.mem.indexOf(u8, sudo_line, "has_sudo") != null;
     const sudo_prefix: []const u8 = if (has_sudo and !is_root) "sudo " else "";
-    const existing_bun = std.mem.trim(u8, bun_path_line, &std.ascii.whitespace);
-    const bun_path = if (existing_bun.len > 0)
-        try allocator.dupe(u8, existing_bun)
-    else if (is_root)
-        try allocator.dupe(u8, "/root/.bun/bin/bun")
+    const bun_path_trimmed = std.mem.trim(u8, bun_path_line, &std.ascii.whitespace);
+    // Line 5 is path from "command -v bun"; if it looks like a version (e.g. 1.3.6) ignore it
+    const is_valid_path = bun_path_trimmed.len > 0 and std.mem.indexOf(u8, bun_path_trimmed, "/") != null;
+    // When we install Bun ourselves we use fixed path so systemd (no HOME) finds it.
+    const bun_path = if (is_valid_path)
+        try allocator.dupe(u8, bun_path_trimmed)
     else
-        try std.fmt.allocPrint(allocator, "/home/{s}/.bun/bin/bun", .{server.user});
+        try allocator.dupe(u8, "/var/lib/selfhost/.bun/bin/bun");
     defer allocator.free(bun_path);
 
     try appendSse(allocator, sse_out, "uploading", "Uploading source to /tmp/selfhost-agent.ts...", "in-progress");
@@ -340,7 +342,12 @@ pub fn runInstallAgent(
 
     try appendSse(allocator, sse_out, "installing_bun", "Checking/Installing Bun runtime...", "in-progress");
 
-    const start_sh_content = startShContent(allocator, server_url, server.id, agent_key_to_use, bun_path) catch |err| {
+    // BUN_INSTALL dir for start.sh: strip "/bin/bun" from path so service finds Bun when systemd doesn't set HOME
+    const bun_install_dir: []const u8 = if (std.mem.endsWith(u8, bun_path, "/bin/bun"))
+        bun_path[0 .. bun_path.len - 8]
+    else
+        "/var/lib/selfhost/.bun";
+    const start_sh_content = startShContent(allocator, server_url, server.id, agent_key_to_use, bun_path, bun_install_dir) catch |err| {
         log.err("startShContent: {any}", .{err});
         try appendSse(allocator, sse_out, "error", "Failed to build start script", "error");
         return false;
@@ -380,8 +387,14 @@ pub fn runInstallAgent(
         try std.fmt.allocPrint(allocator, "MISSING=\"\"; for cmd in curl bash unzip; do command -v $cmd >/dev/null 2>&1 || MISSING=\"$MISSING $cmd\"; done; [ -n \"$MISSING\" ] && (({s}command -v apt-get >/dev/null 2>&1 && {s}DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends $MISSING 2>/dev/null) || ({s}command -v yum >/dev/null 2>&1 && {s}yum install -y -q $MISSING) || ({s}command -v dnf >/dev/null 2>&1 && {s}dnf install -y -q $MISSING) || true)", .{ sudo_prefix, sudo_prefix, sudo_prefix, sudo_prefix, sudo_prefix, sudo_prefix });
     defer allocator.free(deps_cmd);
 
-    const install_block = if (existing_bun.len == 0)
-        try std.fmt.allocPrint(allocator, "{s} && command -v bun >/dev/null 2>&1 || (curl -fsSL https://bun.sh/install | bash); export BUN_INSTALL=\"$HOME/.bun\"; export PATH=\"$BUN_INSTALL/bin:$PATH\"; {s}mkdir -p /var/lib/selfhost; {s}mv -f /tmp/selfhost-agent.ts /var/lib/selfhost/agent.ts; {s}chmod +x /var/lib/selfhost/agent.ts", .{ deps_cmd, sudo_prefix, sudo_prefix, sudo_prefix })
+    // When installing Bun, use a fixed path under /var/lib/selfhost so the service finds it
+    // regardless of $HOME (systemd/OpenRC often leave HOME unset). Must pass BUN_INSTALL into
+    // the shell that runs the install script: with "curl | bash", the right-hand bash does NOT
+    // inherit BUN_INSTALL from the left side, so we use "env BUN_INSTALL=... bash -c 'curl | bash'".
+    const bun_fixed_path = "/var/lib/selfhost/.bun";
+    const need_install_bun = std.mem.eql(u8, bun_path, "/var/lib/selfhost/.bun/bin/bun");
+    const install_block = if (need_install_bun)
+        try std.fmt.allocPrint(allocator, "{s} && {s}mkdir -p /var/lib/selfhost && command -v bun >/dev/null 2>&1 || ({s}env BUN_INSTALL={s} bash -c 'curl -fsSL https://bun.sh/install | bash'); {s}mv -f /tmp/selfhost-agent.ts /var/lib/selfhost/agent.ts; {s}chmod +x /var/lib/selfhost/agent.ts", .{ deps_cmd, sudo_prefix, sudo_prefix, bun_fixed_path, sudo_prefix, sudo_prefix })
     else
         try std.fmt.allocPrint(allocator, "{s}mkdir -p /var/lib/selfhost; {s}mv -f /tmp/selfhost-agent.ts /var/lib/selfhost/agent.ts; {s}chmod +x /var/lib/selfhost/agent.ts", .{ sudo_prefix, sudo_prefix, sudo_prefix });
     defer allocator.free(install_block);
@@ -560,7 +573,7 @@ pub fn runInstallAgent(
     else
         "rc-service selfhost-agent status && tail -20 /var/log/selfhost-agent.log | grep -E '(Connected|Connection failed|Starting)' || echo 'Service not running'";
 
-    var verify_args = std.ArrayList([]const u8).initCapacity(allocator, 10) catch return false;
+    var verify_args = std.ArrayList([]const u8).initCapacity(allocator, 14) catch return false;
     defer verify_args.deinit(allocator);
     try verify_args.append(allocator, "ssh");
     try verify_args.append(allocator, "-i");
@@ -571,6 +584,12 @@ pub fn runInstallAgent(
     try verify_args.append(allocator, "UserKnownHostsFile=/dev/null");
     try verify_args.append(allocator, "-o");
     try verify_args.append(allocator, "LogLevel=ERROR");
+    try verify_args.append(allocator, "-o");
+    try verify_args.append(allocator, "ConnectTimeout=45");
+    if (server.port != 22) {
+        try verify_args.append(allocator, "-p");
+        try verify_args.append(allocator, port_str);
+    }
     if (use_cloudflare) {
         try verify_args.append(allocator, "-o");
         try verify_args.append(allocator, "ProxyCommand=cloudflared access ssh --hostname %h");
@@ -608,7 +627,9 @@ pub fn runInstallAgent(
     return true;
 }
 
-fn startShContent(allocator: std.mem.Allocator, server_url: []const u8, server_id: []const u8, agent_key: []const u8, bun_path: []const u8) ![]const u8 {
+/// Build start.sh content. bun_install_dir is the Bun install directory (e.g. /var/lib/selfhost/.bun)
+/// so BUN_INSTALL is set correctly when systemd does not set HOME.
+fn startShContent(allocator: std.mem.Allocator, server_url: []const u8, server_id: []const u8, agent_key: []const u8, bun_path: []const u8, bun_install_dir: []const u8) ![]const u8 {
     var out = std.ArrayList(u8).initCapacity(allocator, 1024) catch return error.OutOfMemory;
     errdefer out.deinit(allocator);
     var w = out.writer(allocator);
@@ -620,7 +641,7 @@ fn startShContent(allocator: std.mem.Allocator, server_url: []const u8, server_i
         \\export SELFHOST_SERVER_URL="{s}"
         \\export SELFHOST_AGENT_ID="{s}"
         \\export SELFHOST_AGENT_KEY="{s}"
-        \\export BUN_INSTALL="$HOME/.bun"
+        \\export BUN_INSTALL="{s}"
         \\export PATH="$BUN_INSTALL/bin:$PATH"
         \\echo "--- Wrapper started at $(date) (PID: $$) ---"
         \\cleanup() {{ echo "Received stop signal..."; kill -TERM "$AGENT_PID" 2>/dev/null; wait "$AGENT_PID"; exit 0; }}
@@ -637,7 +658,7 @@ fn startShContent(allocator: std.mem.Allocator, server_url: []const u8, server_i
         \\done
         \\
     ,
-        .{ server_url, server_id, agent_key, bun_path },
+        .{ server_url, server_id, agent_key, bun_install_dir, bun_path },
     );
     return try out.toOwnedSlice(allocator);
 }
@@ -676,4 +697,124 @@ fn serviceFileContent(allocator: std.mem.Allocator, init_system: []const u8) ![]
         );
     }
     return try allocator.dupe(u8, "");
+}
+
+/// Remote diagnostic script: init system, service status, Bun paths, agent log, unit/script.
+const diagnose_script =
+    \\echo "========== INIT SYSTEM =========="
+    \\if [ -d /run/systemd/system ]; then echo "systemd"; systemctl is-active selfhost-agent 2>/dev/null || true; systemctl status selfhost-agent --no-pager 2>/dev/null || true
+    \\elif [ -f /sbin/openrc ]; then echo "openrc"; rc-service selfhost-agent status 2>/dev/null || true
+    \\else echo "unknown"; fi
+    \\
+    \\echo ""
+    \\echo "========== BUN / START SCRIPT =========="
+    \\echo "Bun at fixed path:"; ls -la /var/lib/selfhost/.bun/bin/bun 2>/dev/null || echo "(not found)"
+    \\echo "Bun in PATH:"; command -v bun 2>/dev/null || echo "(not found)"
+    \\echo "start.sh BUN_INSTALL line:"; grep -E "^export BUN_INSTALL=" /var/lib/selfhost/start.sh 2>/dev/null || echo "(no start.sh or no BUN_INSTALL)"
+    \\echo "start.sh first 20 lines:"; head -20 /var/lib/selfhost/start.sh 2>/dev/null || echo "(no start.sh)"
+    \\
+    \\echo ""
+    \\echo "========== AGENT LOG (last 80 lines) =========="
+    \\if [ -f /var/log/selfhost-agent.log ]; then tail -80 /var/log/selfhost-agent.log; else echo "(no log file)"; fi
+    \\
+    \\echo ""
+    \\echo "========== SERVICE UNIT (if systemd) =========="
+    \\[ -f /etc/systemd/system/selfhost-agent.service ] && cat /etc/systemd/system/selfhost-agent.service || true
+    \\echo ""
+    \\echo "========== OPENRC SCRIPT (if openrc) =========="
+    \\[ -f /etc/init.d/selfhost-agent ] && head -30 /etc/init.d/selfhost-agent || true
+;
+
+/// SSH to server (tunnel or direct) and run diagnostic script. Caller owns returned string.
+pub fn runDiagnoseAgent(
+    allocator: std.mem.Allocator,
+    server: *servers_service.Server,
+    private_key_pem: []const u8,
+) ![]const u8 {
+    var rand_buf: [8]u8 = undefined;
+    std.crypto.random.bytes(&rand_buf);
+    const hex_suffix = std.fmt.bytesToHex(rand_buf, .lower);
+    var key_path_buf: [64]u8 = undefined;
+    const key_path = std.fmt.bufPrintZ(&key_path_buf, "/tmp/selfhost-key-{s}", .{hex_suffix}) catch return error.OutOfMemory;
+    const key_file = std.fs.createFileAbsolute(key_path[0 .. key_path.len - 1], .{ .mode = 0o600 }) catch |err| {
+        log.err("diagnose: create temp key file: {any}", .{err});
+        return err;
+    };
+    defer key_file.close();
+    defer std.posix.unlink(key_path) catch {};
+    key_file.writeAll(private_key_pem) catch |err| {
+        log.err("diagnose: write key: {any}", .{err});
+        return err;
+    };
+    const key_path_no_null = key_path[0 .. key_path.len - 1];
+
+    const use_cloudflare = server.cloudflare_tunnel_hostname != null and server.cloudflare_tunnel_hostname.?.len > 0;
+    const host = if (use_cloudflare) server.cloudflare_tunnel_hostname.? else server.ip;
+    var target_buf: [256]u8 = undefined;
+    const target = std.fmt.bufPrint(&target_buf, "{s}@{s}", .{ server.user, host }) catch return error.OutOfMemory;
+    const port_str = if (server.port == 22) "" else try std.fmt.allocPrint(allocator, "{d}", .{server.port});
+    defer if (server.port != 22) allocator.free(port_str);
+
+    var argv = std.ArrayList([]const u8).initCapacity(allocator, 18) catch return error.OutOfMemory;
+    defer argv.deinit(allocator);
+    try argv.append(allocator, "ssh");
+    try argv.append(allocator, "-i");
+    try argv.append(allocator, key_path_no_null);
+    try argv.append(allocator, "-o");
+    try argv.append(allocator, "StrictHostKeyChecking=no");
+    try argv.append(allocator, "-o");
+    try argv.append(allocator, "UserKnownHostsFile=/dev/null");
+    try argv.append(allocator, "-o");
+    try argv.append(allocator, "LogLevel=ERROR");
+    try argv.append(allocator, "-o");
+    try argv.append(allocator, "ConnectTimeout=45");
+    if (server.port != 22) {
+        try argv.append(allocator, "-p");
+        try argv.append(allocator, port_str);
+    }
+    if (use_cloudflare) {
+        try argv.append(allocator, "-o");
+        try argv.append(allocator, "ProxyCommand=cloudflared access ssh --hostname %h");
+    }
+    try argv.append(allocator, target);
+    try argv.append(allocator, "bash -s");
+
+    var child = std.process.Child.init(argv.items, allocator);
+    child.stdin_behavior = .Pipe;
+    child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Pipe;
+    child.spawn() catch |err| {
+        log.err("diagnose: ssh spawn failed: {any}", .{err});
+        return err;
+    };
+    const stdin = child.stdin orelse {
+        _ = child.wait() catch {};
+        return error.NoStdin;
+    };
+    stdin.writeAll(diagnose_script) catch |err| {
+        log.err("diagnose: write script: {any}", .{err});
+        _ = child.wait() catch {};
+        return err;
+    };
+    stdin.close();
+    child.stdin = null;
+
+    var stdout = std.ArrayList(u8).initCapacity(allocator, 8192) catch return error.OutOfMemory;
+    defer stdout.deinit(allocator);
+    var stderr = std.ArrayList(u8).initCapacity(allocator, 2048) catch return error.OutOfMemory;
+    defer stderr.deinit(allocator);
+    child.collectOutput(allocator, &stdout, &stderr, 256 * 1024) catch |err| {
+        log.err("diagnose: collectOutput: {any}", .{err});
+        return err;
+    };
+    _ = child.wait() catch {};
+
+    var out = std.ArrayList(u8).initCapacity(allocator, stdout.items.len + stderr.items.len + 64) catch return error.OutOfMemory;
+    defer out.deinit(allocator);
+    out.appendSlice(allocator, stdout.items) catch return error.OutOfMemory;
+    if (stderr.items.len > 0) {
+        out.appendSlice(allocator, "\n--- stderr ---\n") catch return error.OutOfMemory;
+        out.appendSlice(allocator, stderr.items) catch return error.OutOfMemory;
+    }
+    return try out.toOwnedSlice(allocator);
 }
