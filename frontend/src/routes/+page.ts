@@ -21,16 +21,20 @@ export const load: PageLoad = async () => {
 		: null;
 	const team = session?.team ?? null;
 	const teams = user ? await teamsApi.getTeams() : [];
-	const teamsList = teams.length > 0 ? teams : (team ? [team] : []);
+	const teamsList = teams.length > 0 ? teams : team ? [team] : [];
 
 	try {
 		const [serversRes, projectsRes] = await Promise.all([
 			api.get<{ data?: any[] }>('/servers').catch(() => ({ data: [] })),
 			api.get<{ data?: any[] }>('/projects').catch(() => ({ data: [] }))
 		]);
-		const servers = Array.isArray(serversRes.data) ? serversRes.data : (serversRes.data as any)?.data ?? [];
-		const projects = Array.isArray(projectsRes.data) ? projectsRes.data : (projectsRes.data as any)?.data ?? [];
-		const websiteMode = false; // TODO: from API /settings/website-mode when available
+		const servers = Array.isArray(serversRes.data)
+			? serversRes.data
+			: ((serversRes.data as any)?.data ?? []);
+		const projects = Array.isArray(projectsRes.data)
+			? projectsRes.data
+			: ((projectsRes.data as any)?.data ?? []);
+		const websiteMode = true; // TODO: from API /settings/website-mode when available
 		return {
 			shouldShowLanding: websiteMode,
 			shouldUseAppLayout: true,

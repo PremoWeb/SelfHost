@@ -66,7 +66,10 @@ COPY zig/ ./zig/
 WORKDIR /app/zig
 
 # Fetch deps + build (add -v for verbose output if debugging)
-RUN zig build -Doptimize=ReleaseSafe
+# Also ensure libfacil.io.so is copied to a known location
+RUN zig build -Doptimize=ReleaseSafe 2>&1 | tee /tmp/build.log || true
+RUN mkdir -p /tmp/lib && find /root/.cache/zig/p -name "libfacil.io.so" -exec cp {} /tmp/lib/ \; 2>/dev/null || true
+RUN ls -la /tmp/lib/ 2>/dev/null || echo "Library not in cache"
 
 
 # Stage 3: Final Runtime
@@ -86,6 +89,14 @@ RUN mkdir -p /data/git-repos /app/frontend /app/drizzle
 
 # Copy built backend binary
 COPY --from=backend-builder /app/zig/zig-out/bin/selfhost-server /app/selfhost-server
+
+# Copy libfacil.io.so from build cache if available
+COPY --from=backend-builder /tmp/lib/libfacil.io.so /usr/local/lib/libfacil.io.so 2>/dev/null || true
+RUN ldconfig 2>/dev/null || true
+
+# Copy and setup entrypoint script for library loading
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Frontend assets are now embedded in the binary.
 # COPY --from=frontend-builder /app/zig/frontend /app/frontend
@@ -112,5 +123,6 @@ EXPOSE 3000
 # Run as non-root user
 USER www-data
 
-# Start the server
+# Start the server with entrypoint script
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/app/selfhost-server"]
