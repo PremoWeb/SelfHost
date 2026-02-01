@@ -11,7 +11,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { Database, Plus, Globe, Package, Info, ExternalLink } from '@lucide/svelte';
+	import { Database, Plus, Globe, Package, Info, ExternalLink } from 'lucide-svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();

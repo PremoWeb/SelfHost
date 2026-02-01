@@ -35,7 +35,7 @@
 	let showCreateDialog = false;
 	let copiedUrl: string | null = null;
 
-	const projectId = $page.params.uuid;
+	const projectId = $page.params.uuid ?? '';
 	const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
 	$: httpCloneUrl = repository ? `${baseUrl}/api/git/${projectId}/${repository.name}.git` : '';
@@ -114,7 +114,7 @@
 				This project doesn't have a Git repository yet. Create one to start version controlling your
 				code.
 			</p>
-			<Button on:click={() => (showCreateDialog = true)}>
+			<Button onclick={() => (showCreateDialog = true)}>
 				<Plus class="mr-2 h-4 w-4" />
 				Create Repository
 			</Button>
@@ -209,7 +209,7 @@
 							<Button
 								variant="outline"
 								size="icon"
-								on:click={() => copyToClipboard(httpCloneUrl, 'HTTPS URL')}
+								onclick={() => copyToClipboard(httpCloneUrl, 'HTTPS URL')}
 							>
 								{#if copiedUrl === httpCloneUrl}
 									<Check class="h-4 w-4 text-green-600" />
@@ -232,7 +232,7 @@
 							<Button
 								variant="outline"
 								size="icon"
-								on:click={() => copyToClipboard(sshCloneUrl, 'SSH URL')}
+								onclick={() => copyToClipboard(sshCloneUrl, 'SSH URL')}
 							>
 								{#if copiedUrl === sshCloneUrl}
 									<Check class="h-4 w-4 text-green-600" />

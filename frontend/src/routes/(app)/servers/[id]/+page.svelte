@@ -81,7 +81,7 @@
 		Plus,
 		Key,
 		Copy
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import Terminal from '$lib/components/Terminal.svelte';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 	import AddKeyForm from '$lib/components/security/AddKeyForm.svelte';

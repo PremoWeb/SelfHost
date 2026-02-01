@@ -12,7 +12,7 @@
     import { Badge } from "$lib/components/ui/badge";
     import PageTitle from '$lib/components/PageTitle.svelte';
     import StickyHeader from '$lib/components/StickyHeader.svelte';
-    import { Plus, Trash2, Edit, Bell } from "@lucide/svelte";
+    import { Plus, Trash2, Edit, Bell } from "lucide-svelte";
 
     let { data }: { data: PageData } = $props();
 

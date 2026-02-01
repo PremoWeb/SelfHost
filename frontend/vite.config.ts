@@ -3,11 +3,6 @@ import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 
-console.log("----------------------------------------");
-console.log("Loading frontend/vite.config.ts");
-console.log("CWD:", process.cwd());
-console.log("----------------------------------------");
-
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	build: {
@@ -32,7 +27,11 @@ export default defineConfig({
 			'/ws': { target: 'ws://127.0.0.1:3000', ws: true }
 		}
 	},
+	ssr: {
+		noExternal: ['tailwind-variants', '@xterm/xterm', '@xterm/addon-fit', 'three', 'three-globe', 'mermaid']
+	},
 	optimizeDeps: {
-		include: ['lucide-svelte', 'axios', 'clsx', 'tailwind-merge', 'bits-ui']
+		include: ['lucide-svelte', 'axios', 'clsx', 'tailwind-merge', 'bits-ui', 'mermaid', '@xterm/xterm', '@xterm/addon-fit', 'three', 'three-globe', 'shiki', 'tailwind-variants'],
+
 	}
 });

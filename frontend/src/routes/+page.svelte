@@ -22,7 +22,7 @@
 		Zap,
 		Shield,
 		Code2
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import PublicHeader from '$lib/components/layout/PublicHeader.svelte';
 	import PublicFooter from '$lib/components/layout/PublicFooter.svelte';

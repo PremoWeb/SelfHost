@@ -2,7 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import PublicHeader from '$lib/components/layout/PublicHeader.svelte';
 	import PublicFooter from '$lib/components/layout/PublicFooter.svelte';
-	import { Heart, Github, Coffee, Building2, Sparkles, Check } from '@lucide/svelte';
+	import { Heart, Github, Coffee, Building2, Sparkles, Check } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 </script>
 

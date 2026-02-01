@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { Github, Twitter, Mail } from '@lucide/svelte';
+	import { Github, Twitter, Mail } from 'lucide-svelte';
 </script>
 
 <footer class="border-border bg-muted/30 mt-24 border-t">

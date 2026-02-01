@@ -5,7 +5,7 @@
 	import { Badge } from '$lib/components/ui/badge';
     import Separator from "$lib/components/ui/separator/separator.svelte";
 	import { Label } from '$lib/components/ui/label';
-	import { Folder, Building2, Mail, Phone, ArrowLeft, ExternalLink, Activity, User } from '@lucide/svelte';
+	import { Folder, Building2, Mail, Phone, ArrowLeft, ExternalLink, Activity, User } from 'lucide-svelte';
 	import { formatDate } from '$lib/utils/helpers';
     import PageTitle from '$lib/components/PageTitle.svelte';
 

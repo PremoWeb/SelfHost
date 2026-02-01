@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { toastStore } from '$lib/stores/toast';
 	import { authClient } from '$lib/auth-client';
-	import { User, Mail, Lock, Loader2, ArrowRight, ShieldCheck, Rocket } from '@lucide/svelte';
+	import { User, Mail, Lock, Loader2, ArrowRight, ShieldCheck, Rocket } from 'lucide-svelte';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 
 	let name = $state('');

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button';
-	import { ArrowRight, Rocket, Shield, Zap, Globe, Code2, Server } from '@lucide/svelte';
+	import { ArrowRight, Rocket, Shield, Zap, Globe, Code2, Server } from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 </script>
 

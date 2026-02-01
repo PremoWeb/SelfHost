@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { toastStore } from '$lib/stores/toast';
 	import { authClient } from '$lib/auth-client';
-	import { Mail, Lock, Loader2, ArrowRight, ShieldCheck, Rocket, ArrowLeft } from '@lucide/svelte';
+	import { Mail, Lock, Loader2, ArrowRight, ShieldCheck, Rocket, ArrowLeft } from 'lucide-svelte';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 	import type { PageData } from './$types';
 

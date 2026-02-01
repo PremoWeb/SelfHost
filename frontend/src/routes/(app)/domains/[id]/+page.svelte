@@ -17,7 +17,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { Globe, Plus, Trash2, ArrowLeft, Server, Tag, ChevronRight } from '@lucide/svelte';
+	import { Globe, Plus, Trash2, ArrowLeft, Server, Tag, ChevronRight } from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
 

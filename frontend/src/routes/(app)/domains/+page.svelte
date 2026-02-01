@@ -30,7 +30,7 @@
 		Users,
 		Share2,
 		UserPlus
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
 

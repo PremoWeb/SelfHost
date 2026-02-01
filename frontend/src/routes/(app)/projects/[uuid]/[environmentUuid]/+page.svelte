@@ -28,7 +28,7 @@
 		Activity,
 		Search,
 		ArrowUpDown
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 

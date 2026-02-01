@@ -3,6 +3,7 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		%sveltekit.head%
 		<script>
 			// Check user preference from persistence
@@ -11,7 +12,7 @@
 
 			// Apply initial theme
 			const shouldUseDark = mode === 'dark' || ((!mode || mode === 'system') && system === 'dark');
-			
+
 			if (shouldUseDark) {
 				document.documentElement.classList.add('dark');
 				document.documentElement.style.backgroundColor = '#09090b'; // zinc-950

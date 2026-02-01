@@ -27,7 +27,7 @@
 		Save,
 		UserCheck,
 		LogOut
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import { formatDate } from '$lib/utils/helpers';
 	import { fade } from 'svelte/transition';
 

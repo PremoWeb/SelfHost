@@ -30,7 +30,7 @@
 		Trash2,
 		Plus,
 		Layers
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import { onMount, untrack } from 'svelte';
 	import type { EnvironmentVariable } from '$lib/types';

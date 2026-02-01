@@ -8,7 +8,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { Trash2, Star, Plus, Globe, Share2 } from '@lucide/svelte';
+	import { Trash2, Star, Plus, Globe, Share2 } from 'lucide-svelte';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 
 	let { data }: { data: PageData } = $props();

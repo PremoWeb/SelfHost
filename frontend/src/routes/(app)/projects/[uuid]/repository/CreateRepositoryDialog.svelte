@@ -118,7 +118,7 @@
 				<Input
 					id="name"
 					bind:value={name}
-					on:input={(e) => slugifyName(e.currentTarget.value)}
+					oninput={(e) => slugifyName((e as any).currentTarget.value)}
 					placeholder="my-project"
 					class={errors.name ? 'border-destructive' : ''}
 					disabled={submitting}
@@ -159,7 +159,7 @@
 				<Button
 					type="button"
 					variant="outline"
-					on:click={() => (open = false)}
+					onclick={() => (open = false)}
 					disabled={submitting}
 				>
 					Cancel

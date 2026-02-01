@@ -24,6 +24,10 @@ rm -f "$DST/hooks.server.ts"
 # Copy app files
 cp "$SRC/app.css" "$SRC/app.html" "$SRC/app.d.ts" "$DST/" 2>/dev/null || true
 
+# Sync static directory
+mkdir -p "$ROOT/frontend/static"
+cp -r "$ROOT/static/." "$ROOT/frontend/static/"
+
 # Overwrite all .remote.ts with API-based stubs (Zig backend)
 STUBS="$ROOT/frontend/stubs"
 cp "$STUBS/layout.remote.ts"   "$DST/routes/(app)/layout.remote.ts"

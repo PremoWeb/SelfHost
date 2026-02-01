@@ -63,3 +63,6 @@ bun.lockb
 # Zig
 .zig-cache/
 zig-out/
+zig/src/frontend_data.zig
+zig/src/frontend-embed/
+zig/frontend-embed/

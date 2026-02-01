@@ -34,7 +34,7 @@
 		Copy,
 		Plus,
 		Check
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import type { PageData } from './$types';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 

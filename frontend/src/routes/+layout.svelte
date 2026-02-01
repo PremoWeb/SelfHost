@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { Toaster } from 'svelte-sonner';
 	import { page } from '$app/state';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import '../app.css';
@@ -18,7 +19,7 @@
 	import { api } from '$lib/api/client';
 	import { toastStore } from '$lib/stores/toast';
 	import { Button } from '$lib/components/ui/button';
-	import { LogOut, AlertTriangle } from '@lucide/svelte';
+	import { LogOut, AlertTriangle } from 'lucide-svelte';
 
 	import { ModeWatcher } from 'mode-watcher';
 	import { setupViewTransition } from 'sveltekit-view-transition';
@@ -74,41 +75,41 @@
 	<meta name="description" content="Self-hostable cloud infrastructure management" />
 </svelte:head>
 
-<div class="min-h-screen bg-background text-foreground transition-colors duration-300">
+<div class="bg-background text-foreground min-h-screen transition-colors duration-300">
 	<!-- Toast notifications -->
 	<Toast />
 
 	{#if shouldUseAppLayout}
 		<!-- App Layout: Sidebar, Activity Feed, Command Menu -->
 		<div class="flex w-full min-w-0">
-		{#if true}
-			{@const sidebarData = mergedData}
-			<Sidebar
-				bind:sidebarOpen
-				currentTeam={mergedData?.team ?? null}
-				activeCompany={layoutData.activeCompany}
-				teams={mergedData?.teams ?? []}
-				companies={layoutData.companies || []}
-				users={layoutData.users || []}
-				isSuperAdmin={sidebarData.isSuperAdmin || false}
-				isGod={sidebarData.isGod || false}
-				isImpersonating={sidebarData.isImpersonating || false}
-				impersonationType={sidebarData.impersonationType || layoutData.impersonationType}
-				websiteMode={sidebarData.websiteMode || false}
-				{switchTeam}
-				{switchCompany}
-				{impersonateUser}
-				stopImpersonating={stopImpersonating}
-			/>
-		{/if}
+			{#if true}
+				{@const sidebarData = mergedData}
+				<Sidebar
+					bind:sidebarOpen
+					currentTeam={mergedData?.team ?? null}
+					activeCompany={layoutData.activeCompany}
+					teams={mergedData?.teams ?? []}
+					companies={layoutData.companies || []}
+					users={layoutData.users || []}
+					isSuperAdmin={sidebarData.isSuperAdmin || false}
+					isGod={sidebarData.isGod || false}
+					isImpersonating={sidebarData.isImpersonating || false}
+					impersonationType={sidebarData.impersonationType || layoutData.impersonationType}
+					websiteMode={sidebarData.websiteMode || false}
+					{switchTeam}
+					{switchCompany}
+					{impersonateUser}
+					{stopImpersonating}
+				/>
+			{/if}
 
-		<main class="w-full min-w-0 flex-1 pl-64" class:pt-14={shouldShowBanner}>
-			<div class="w-full max-w-none px-8 py-6">
-				<Tooltip.Provider>
-					{@render children()}
-				</Tooltip.Provider>
-			</div>
-		</main>
+			<main class="w-full min-w-0 flex-1 pl-64" class:pt-14={shouldShowBanner}>
+				<div class="w-full max-w-none px-8 py-6">
+					<Tooltip.Provider>
+						{@render children()}
+					</Tooltip.Provider>
+				</div>
+			</main>
 		</div>
 
 		<ActivityFeed />
@@ -130,3 +131,4 @@
 		</div>
 	{/if}
 </div>
+<Toaster />

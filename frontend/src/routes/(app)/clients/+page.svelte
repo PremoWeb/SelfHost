@@ -19,7 +19,7 @@
 		MoreVertical,
 		Pencil,
 		Trash2
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import { toastStore } from '$lib/stores/toast';
 
 	let { data }: { data: PageData } = $props();

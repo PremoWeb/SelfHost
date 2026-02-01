@@ -5,7 +5,7 @@
 	import * as Table from '$lib/components/ui/table';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
-	import { UserPlus, UserMinus, Shield } from '@lucide/svelte';
+	import { UserPlus, UserMinus, Shield } from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
 	let members = $derived(data.members);

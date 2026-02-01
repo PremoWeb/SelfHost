@@ -13,7 +13,7 @@
     import { Label } from "$lib/components/ui/label";
     import { Checkbox } from "$lib/components/ui/checkbox";
     import { Badge } from "$lib/components/ui/badge";
-    import { Key, Plus, Trash2, Copy, Check } from "@lucide/svelte";
+    import { Key, Plus, Trash2, Copy, Check } from "lucide-svelte";
 
 	let { data }: { data: PageData } = $props();
 

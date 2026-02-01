@@ -12,7 +12,7 @@
 
 	import PageTitle from '$lib/components/PageTitle.svelte';
 	import StickyHeader from '$lib/components/StickyHeader.svelte';
-	import { Plus, Server, Network, LayoutGrid, Box, Container } from '@lucide/svelte';
+	import { Plus, Server, Network, LayoutGrid, Box, Container } from 'lucide-svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();

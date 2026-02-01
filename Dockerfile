@@ -1,71 +1,116 @@
-ARG BUN_VERSION=latest
-FROM oven/bun:${BUN_VERSION} AS builder
+# Stage 1: Build Frontend
+FROM oven/bun:latest AS frontend-builder
 
 WORKDIR /app
-# Better Auth requires a URL during build for validation/prerendering
-ENV BETTER_AUTH_URL=http://localhost:3000
-ENV BETTER_AUTH_SECRET=build_placeholder
-ENV DATABASE_URL=file:./build.db
 
-COPY --link package.json bun.lock* ./
-RUN bun install --ci
+# Setup directories to match the structure expected by build scripts
+RUN mkdir -p frontend zig
 
-COPY --link src/ ./src/
-COPY --link svelte.config.js tsconfig.json vite.config.ts agent-websocket-plugin.ts ./
-COPY --link static/ ./static/
-COPY --link drizzle/ ./drizzle/
+# Install Frontend Dependencies
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/bun.lock* ./
+RUN bun install
 
-# Build the SvelteKit application
-RUN bun run build && mkdir -p build/prerendered
+# Copy Frontend Source
+COPY frontend/ ./
 
-# Compile the adapter's production output into a single binary
-# This includes the server and asset handling logic
-RUN bun build ./build/index.js --compile --outfile selfhost-server
+# Build Frontend
+# This runs "vite build" with BUILD_TO_ZIG=1.
+# vite.config.ts outputs to ../zig/frontend (which is /app/zig/frontend)
+RUN bun run build:zig
 
-# Final production stage
-FROM oven/bun:latest AS runtime
+
+# Get Zig compiler toolchain from reliable community image
+FROM kassany/alpine-ziglang:0.15.1 AS zig-toolchain
+
+
+# Stage 2: Build Backend (Zig)
+FROM debian:bookworm-slim AS backend-builder
+
 WORKDIR /app
 
-# Non-interactive shell for some operations
-ENV DEBIAN_FRONTEND=noninteractive
-# Better Auth environment variables
-# These should be provided at runtime via -e or .env file
-ENV BETTER_AUTH_URL=
-ENV BETTER_AUTH_SECRET=
-ENV NODE_ENV=production
+# Install system dependencies required for zig build/fetch/linking
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libsqlite3-dev \
+    git \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set Git repositories root to use volume mount
-ENV GIT_REPOS_ROOT=/data/git-repos
+# Copy Zig toolchain from the actual locations in kassany/alpine-ziglang:0.15.1
+# Binary + lib dir are under /zig/0.15.1/files/
+COPY --from=zig-toolchain /zig/0.15.1/files/zig          /usr/local/bin/zig
+COPY --from=zig-toolchain /zig/0.15.1/files/lib          /usr/local/lib/zig/
 
-# Copy dependency files
-COPY --link package.json bun.lock* ./
-# Install production dependencies (includes building native modules for the runtime environment)
-RUN bun install --ci --production
+# Optional: if you get linker errors later (missing compiler-rt, libc++, etc.), add these
+# COPY --from=zig-toolchain /zig/0.15.1/files/lib/libc     /usr/local/lib/libc/     || true
+# COPY --from=zig-toolchain /zig/0.15.1/files/lib/libcxx   /usr/local/lib/libcxx/   || true
+# COPY --from=zig-toolchain /zig/0.15.1/files/lib/compiler-rt /usr/local/lib/compiler-rt/ || true
 
-# Copy the compiled binary from builder
-COPY --from=builder /app/selfhost-server ./selfhost-server
-# Copy the client assets and prerendered files
-# svelte-adapter-bun expects these folders in the same directory as the server
-COPY --from=builder /app/build/client ./client
-COPY --from=builder /app/build/prerendered ./prerendered
-# Copy migrations for automatic DB initialization
-COPY --from=builder /app/drizzle ./drizzle
-COPY --link healthcheck.ts ./
+# Add zig to PATH
+ENV PATH="/usr/local/bin:${PATH}"
 
-# Create data directory for SQLite databases and Git repos
-RUN mkdir -p /data /data/git-repos && \
-    touch /data/sqlite.db && \
-    chown -R bun:bun /data /app
+# Debug: uncomment during troubleshooting to confirm Zig works and paths are correct
+# RUN zig version || echo "Zig binary not found or not executable" && \
+#     ls -la /usr/local/bin/zig && \
+#     ls -la /usr/local/lib/zig || echo "Lib dir missing"
 
-EXPOSE 3000/tcp
+# Copy Frontend Build from Stage 1 for embedding
+COPY --from=frontend-builder /app/zig/frontend /app/frontend/build
 
-# Create volume mount point for persistent data
+# Copy Your Zig source code
+COPY zig/ ./zig/
+
+# Build the Zig binary
+WORKDIR /app/zig
+
+# Fetch deps + build (add -v for verbose output if debugging)
+RUN zig build -Doptimize=ReleaseSafe
+
+
+# Stage 3: Final Runtime
+FROM debian:bookworm-slim AS runtime
+
+WORKDIR /app
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsqlite3-0 \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create persistent data directories
+RUN mkdir -p /data/git-repos /app/frontend /app/drizzle
+
+# Copy built backend binary
+COPY --from=backend-builder /app/zig/zig-out/bin/selfhost-server /app/selfhost-server
+
+# Frontend assets are now embedded in the binary.
+# COPY --from=frontend-builder /app/zig/frontend /app/frontend
+
+# Copy drizzle migrations from build context (source files)
+COPY drizzle/ /app/drizzle/
+
+# Set permissions for non-root user
+RUN chown -R www-data:www-data /data /app
+
+# Environment variables
+ENV DATABASE_URL=file:/data/sqlite.db \
+    LOGGING_DATABASE_URL=file:/data/sqlite-logs.db \
+    STATIC_DIR=/app/frontend \
+    DRIZZLE_DIR=/app/drizzle \
+    PORT=3000 \
+    GIT_REPOS_ROOT=/data/git-repos
+
+# Persistent volume for sqlite DBs + git repos
 VOLUME ["/data"]
 
-USER bun
+EXPOSE 3000
 
-HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
-    CMD bun /app/healthcheck.ts || exit 1
+# Run as non-root user
+USER www-data
 
-# Run the compiled binary
-CMD ["./selfhost-server"]
+# Start the server
+CMD ["/app/selfhost-server"]

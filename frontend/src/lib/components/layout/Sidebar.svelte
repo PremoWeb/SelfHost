@@ -28,9 +28,9 @@
 		BookOpen,
 		FileText,
 		Monitor
-	} from '@lucide/svelte';
-	import SunIcon from '@lucide/svelte/icons/sun';
-	import MoonIcon from '@lucide/svelte/icons/moon';
+	} from 'lucide-svelte';
+	import SunIcon from 'lucide-svelte/icons/sun';
+	import MoonIcon from 'lucide-svelte/icons/moon';
 	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import { setMode, resetMode } from 'mode-watcher';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';

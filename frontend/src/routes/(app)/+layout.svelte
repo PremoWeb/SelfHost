@@ -4,7 +4,7 @@
 	import { switchTeam, stopImpersonating } from './layout.remote';
 	import { toastStore } from '$lib/stores/toast';
 	import { Button } from '$lib/components/ui/button';
-	import { LogOut, AlertTriangle } from '@lucide/svelte';
+	import { LogOut, AlertTriangle } from 'lucide-svelte';
 	import { wsStore } from '$lib/stores/websocket';
 	import { browser } from '$app/environment';
 

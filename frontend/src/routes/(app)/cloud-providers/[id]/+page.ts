@@ -83,9 +83,9 @@ export const load: PageLoad = async ({ params }) => {
 
 	const metaPromise = provider.type === 'vultr'
 		? Promise.all([
-			api.get<{ regions?: unknown[] }>(`/vps-providers/${id}/regions`).catch(() => ({ regions: [] })),
-			api.get<{ plans?: unknown[] }>(`/vps-providers/${id}/plans`).catch(() => ({ plans: [] })),
-			api.get<{ os?: unknown[] }>(`/vps-providers/${id}/os`).catch(() => ({ os: [] }))
+			api.get<{ regions?: unknown[] }>(`/vps-providers/${id}/regions`).catch(() => ({ data: { regions: [] } })),
+			api.get<{ plans?: unknown[] }>(`/vps-providers/${id}/plans`).catch(() => ({ data: { plans: [] } })),
+			api.get<{ os?: unknown[] }>(`/vps-providers/${id}/os`).catch(() => ({ data: { os: [] } }))
 		]).then(([regionsRes, plansRes, osRes]) => {
 			const rawRegions = (regionsRes.data as { regions?: unknown[] })?.regions ?? [];
 			const regions = Array.isArray(rawRegions)

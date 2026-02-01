@@ -24,7 +24,7 @@
 		Globe,
 		HardDrive,
 		KeyRound
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import { cn } from '$lib/utils';
 	import { badgeVariants } from '$lib/components/ui/badge';
 

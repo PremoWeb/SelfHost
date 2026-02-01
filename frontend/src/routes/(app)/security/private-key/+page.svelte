@@ -11,7 +11,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { KeyRound, Plus, ShieldCheck } from '@lucide/svelte';
+	import { KeyRound, Plus, ShieldCheck } from 'lucide-svelte';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 	import StickyHeader from '$lib/components/StickyHeader.svelte';
 

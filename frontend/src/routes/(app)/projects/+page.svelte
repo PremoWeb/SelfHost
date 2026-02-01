@@ -21,7 +21,7 @@
 		Filter,
 		LayoutGrid,
 		List
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import { Badge } from '$lib/components/ui/badge';
 
 	let { data }: { data: PageData } = $props();

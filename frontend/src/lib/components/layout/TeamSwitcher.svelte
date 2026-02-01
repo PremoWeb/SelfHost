@@ -3,7 +3,7 @@
 	import type { Team } from '$lib/types';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import { Button, buttonVariants } from '$lib/components/ui/button';
-	import { ChevronsUpDown, Check, Users, Shield, Building2, User, Crown, UserCheck } from '@lucide/svelte';
+	import { ChevronsUpDown, Check, Users, Shield, Building2, User, Crown, UserCheck } from 'lucide-svelte';
 	import { api } from '$lib/api/client';
 	import { toastStore } from '$lib/stores/toast';
 	

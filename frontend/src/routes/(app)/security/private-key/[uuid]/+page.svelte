@@ -10,7 +10,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
 	import { Badge } from '$lib/components/ui/badge';
-	import { ArrowLeft, Save, Trash2, ShieldAlert, Eye, EyeOff, Copy } from '@lucide/svelte';
+	import { ArrowLeft, Save, Trash2, ShieldAlert, Eye, EyeOff, Copy } from 'lucide-svelte';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 	import StickyHeader from '$lib/components/StickyHeader.svelte';
 

@@ -13,7 +13,7 @@
 	import * as Dialog from "$lib/components/ui/dialog";
 	import * as Table from "$lib/components/ui/table";
 	import { Badge } from "$lib/components/ui/badge";
-	import { Key, Plus, Trash2, Copy, Check } from '@lucide/svelte';
+	import { Key, Plus, Trash2, Copy, Check } from 'lucide-svelte';
 	
 	const { TableHeader, TableBody, TableRow, TableCell, TableHead } = Table;
 

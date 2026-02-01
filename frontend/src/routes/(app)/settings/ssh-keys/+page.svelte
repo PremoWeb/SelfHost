@@ -93,7 +93,7 @@
 			<h1 class="text-3xl font-bold">SSH Keys</h1>
 			<p class="text-muted-foreground mt-1">Manage SSH keys for Git repository access</p>
 		</div>
-		<Button on:click={() => (showAddDialog = true)}>
+		<Button onclick={() => (showAddDialog = true)}>
 			<Plus class="mr-2 h-4 w-4" />
 			Add SSH Key
 		</Button>
@@ -110,7 +110,7 @@
 			<p class="text-muted-foreground mb-6">
 				Add an SSH key to enable secure Git operations over SSH
 			</p>
-			<Button on:click={() => (showAddDialog = true)}>
+			<Button onclick={() => (showAddDialog = true)}>
 				<Plus class="mr-2 h-4 w-4" />
 				Add your first SSH key
 			</Button>
@@ -164,7 +164,7 @@
 						<Button
 							variant="ghost"
 							size="sm"
-							on:click={() => deleteKey(key.id, key.title)}
+							onclick={() => deleteKey(key.id, key.title)}
 							class="text-destructive hover:text-destructive hover:bg-destructive/10"
 						>
 							<Trash2 class="h-4 w-4" />

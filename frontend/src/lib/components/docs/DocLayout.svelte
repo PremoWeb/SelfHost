@@ -19,7 +19,7 @@
 		ChevronRight,
 		Home,
 		ChevronRight as ChevronRightIcon
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import { toastStore } from '$lib/stores/toast';
 
 	type NavItem = { title: string; path: string };

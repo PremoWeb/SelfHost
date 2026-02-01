@@ -8,7 +8,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
-	import { Landmark, Users, Globe } from '@lucide/svelte';
+	import { Landmark, Users, Globe } from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
 

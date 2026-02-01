@@ -11,7 +11,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 	import StickyHeader from '$lib/components/StickyHeader.svelte';
-	import { RefreshCcw, Unplug, Cloud, ExternalLink, Plus, ShieldCheck } from '@lucide/svelte';
+	import { RefreshCcw, Unplug, Cloud, ExternalLink, Plus, ShieldCheck } from 'lucide-svelte';
 
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 

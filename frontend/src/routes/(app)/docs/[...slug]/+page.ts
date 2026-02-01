@@ -52,16 +52,21 @@ export const load: PageLoad = async ({ params, fetch }) => {
 	const slug = (typeof rawSlug === 'string' ? rawSlug.trim() : '') || 'introduction';
 	const normalizedSlug = slug.split('/')[0] || 'introduction';
 
-	const res = await fetch(`/markdown/${normalizedSlug}.md`, { cache: 'default' });
-	if (!res.ok) {
+	// Import all markdown files eagerly as raw strings
+	const modules = import.meta.glob('../../../../lib/docs/*.md', { 
+		query: '?raw',
+		import: 'default',
+		eager: true 
+	});
+
+	const path = `../../../../lib/docs/${normalizedSlug}.md`;
+	
+	if (!(path in modules)) {
 		// Redirect missing or invalid doc to introduction
-		if (res.status === 404 || !normalizedSlug) {
-			throw redirect(302, '/docs/introduction');
-		}
-		throw new Error(`Documentation page not found: ${normalizedSlug}`);
+		throw redirect(302, '/docs/introduction');
 	}
 
-	const raw = await res.text();
+	const raw = modules[path] as string;
 	const content = stripFrontmatter(raw);
 	const title = slugToTitle(normalizedSlug);
 

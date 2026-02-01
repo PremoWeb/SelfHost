@@ -7,7 +7,7 @@
 		Server,
 		Code2,
 		Layers
-	} from '@lucide/svelte';
+	} from 'lucide-svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import { cn } from '$lib/utils';

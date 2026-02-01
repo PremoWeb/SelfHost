@@ -18,7 +18,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { Search, Filter, X, ChevronLeft, ChevronRight, Eye, Calendar } from '@lucide/svelte';
+	import { Search, Filter, X, ChevronLeft, ChevronRight, Eye, Calendar } from 'lucide-svelte';
 	import { formatDate } from '$lib/utils/helpers';
 
 	let { data }: { data: PageData } = $props();

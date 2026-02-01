@@ -21,7 +21,7 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 	import StickyHeader from '$lib/components/StickyHeader.svelte';
-	import { Plus, Server, Search, ArrowUpDown } from '@lucide/svelte';
+	import { Plus, Server, Search, ArrowUpDown } from 'lucide-svelte';
 
 	import RegisterServerForm from '$lib/components/servers/RegisterServerForm.svelte';
 	import ServerRegistrationWizard from '$lib/components/servers/ServerRegistrationWizard.svelte';

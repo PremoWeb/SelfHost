@@ -25,15 +25,18 @@ const vultr = @import("vultr.zig");
 const logs_service = @import("services/logs.zig");
 const git_service = @import("services/git.zig");
 const git_handlers = @import("git_handlers.zig");
+const frontend_data = @import("frontend_data.zig");
+const StaticHttpFileServer = @import("StaticHttpFileServer");
 
 const nameserver_profiles_service = @import("services/nameserver_profiles.zig");
 
 const log = std.log.scoped(.api);
 
 var agent_ws_settings: zap.WebSockets.Handler(websocket.WsContext).WebSocketSettings = undefined;
+var static_server: StaticHttpFileServer = undefined;
+var static_server_initialized: bool = false;
 
 pub fn init(allocator: std.mem.Allocator) void {
-    _ = allocator;
     agent_ws_settings = .{
         .on_open = router.handleWebSocketOpen,
         .on_ready = router.handleWebSocketReady,
@@ -41,6 +44,18 @@ pub fn init(allocator: std.mem.Allocator) void {
         .on_close = router.handleWebSocketClose,
         .context = null, // Set per-upgrade
     };
+
+    // Initialize static file server with embedded assets
+    static_server = .{
+        .files = .{},
+        .bytes = .{},
+    };
+    frontend_data.populate(&static_server, allocator) catch |err| {
+        log.err("Failed to populate static file server: {any}", .{err});
+        return;
+    };
+    static_server_initialized = true;
+    log.info("Static file server initialized with {d} embedded assets", .{static_server.files.count()});
 }
 
 /// WebSocket upgrade for agents
@@ -2566,85 +2581,63 @@ fn handleCloudflareTokenById(r: zap.Request, method: zap.http.Method, id: []cons
 
 // Static file serving for SPA
 pub fn tryServeStatic(r: zap.Request, path: []const u8, static_dir: []const u8) void {
+    if (static_server_initialized) {
+        const file_name_adapter = StaticHttpFileServer.FileNameAdapter{ .bytes = static_server.bytes.items };
+
+        // StaticHttpFileServer expects paths to start with /
+        const lookup_path = path;
+
+        if (static_server.files.getKeyAdapted(lookup_path, file_name_adapter)) |file| {
+            const content = static_server.bytes.items[file.contents_start..][0..file.contents_len];
+            r.setHeader("Content-Type", @tagName(file.mime_type)) catch {};
+            r.sendBody(content) catch |err| {
+                log.err("Failed to send embedded static file {s}: {any}", .{ lookup_path, err });
+            };
+            return;
+        }
+
+        // SPA Fallback: if not an API call and not a file, serve index.html
+        if (!std.mem.startsWith(u8, lookup_path, "/api/")) {
+            if (static_server.files.getKeyAdapted("/index.html", file_name_adapter)) |index_file| {
+                const content = static_server.bytes.items[index_file.contents_start..][0..index_file.contents_len];
+                r.setContentType(.HTML) catch {};
+                r.sendBody(content) catch |err| {
+                    log.err("Failed to send embedded index.html for {s}: {any}", .{ lookup_path, err });
+                };
+                return;
+            }
+        }
+    }
+
+    // Fallback to disk if not in embedded (useful for dev or missing assets)
+    var d = std.fs.cwd().openDir(static_dir, .{}) catch {
+        handleSpaFallback(r);
+        return;
+    };
+    defer d.close();
+
+    var rel_path = path;
+    if (rel_path.len > 0 and rel_path[0] == '/') rel_path = rel_path[1..];
+    if (rel_path.len == 0) rel_path = "index.html";
+
+    const file = d.openFile(rel_path, .{}) catch {
+        handleSpaFallback(r);
+        return;
+    };
+    defer file.close();
+
     const allocator = router.getAllocator() orelse {
         handleSpaFallback(r);
         return;
     };
-    // Normalize path: strip leading "/", use "index.html" for "/" or ""
-    var rel_path = path;
-    if (rel_path.len > 0 and rel_path[0] == '/') rel_path = rel_path[1..];
-    if (rel_path.len == 0) rel_path = "index.html";
-    // Reject ".." for security
-    if (std.mem.indexOf(u8, rel_path, "..") != null) {
-        r.setStatus(.bad_request);
-        r.sendBody("Invalid path") catch {};
-        return;
-    }
-    // Log the request
-    log.debug("Serving static file: {s}", .{rel_path});
 
-    var dir = std.fs.cwd().openDir(static_dir, .{}) catch {
-        handleSpaFallback(r);
-        return;
-    };
-    defer dir.close();
-    // Try requested path first (e.g. index.html, _app/xyz.js)
-    var file = dir.openFile(rel_path, .{}) catch {
-        log.debug("File not found: {s}, serving index.html", .{rel_path});
-        // Not a file: SPA route (e.g. /servers, /login). Serve index.html so client router handles it.
-        var index_file = dir.openFile("index.html", .{}) catch {
-            handleSpaFallback(r);
-            return;
-        };
-        defer index_file.close();
-        const max_size: usize = 10 * 1024 * 1024; // 10MB
-        const contents = index_file.readToEndAlloc(allocator, max_size) catch {
-            r.setStatus(.internal_server_error);
-            r.sendBody("Failed to read file") catch {};
-            return;
-        };
-        defer allocator.free(contents);
-        r.setContentType(.HTML) catch {};
-        r.sendBody(contents) catch |err| {
-            log.err("Failed to send index.html: {any}", .{err});
-        };
-        return;
-    };
-    defer file.close();
-    const max_size: usize = 10 * 1024 * 1024; // 10MB
-    const contents = file.readToEndAlloc(allocator, max_size) catch {
+    const content = file.readToEndAlloc(allocator, 10 * 1024 * 1024) catch {
         r.setStatus(.internal_server_error);
-        r.sendBody("Failed to read file") catch {};
         return;
     };
-    defer allocator.free(contents);
+    defer allocator.free(content);
 
-    // Explicit MIME type handling
-    if (std.mem.endsWith(u8, rel_path, ".html")) {
-        r.setContentType(.HTML) catch {};
-    } else if (std.mem.endsWith(u8, rel_path, ".js")) {
-        r.setHeader("Content-Type", "application/javascript") catch {};
-    } else if (std.mem.endsWith(u8, rel_path, ".css")) {
-        r.setHeader("Content-Type", "text/css") catch {};
-    } else if (std.mem.endsWith(u8, rel_path, ".json")) {
-        r.setContentType(.JSON) catch {};
-    } else if (std.mem.endsWith(u8, rel_path, ".svg")) {
-        r.setHeader("Content-Type", "image/svg+xml") catch {};
-    } else if (std.mem.endsWith(u8, rel_path, ".png")) {
-        r.setHeader("Content-Type", "image/png") catch {};
-    } else if (std.mem.endsWith(u8, rel_path, ".jpg") or std.mem.endsWith(u8, rel_path, ".jpeg")) {
-        r.setHeader("Content-Type", "image/jpeg") catch {};
-    } else {
-        r.setContentTypeFromFilename(rel_path) catch {
-            r.setContentType(.TEXT) catch {};
-        };
-    }
-
-    r.sendBody(contents) catch |err| {
-        log.err("Failed to send static file: {any}", .{err});
-        r.setStatus(.internal_server_error);
-        r.sendBody("Internal Server Error") catch {};
-    };
+    r.sendBody(content) catch {};
 }
 
 // SPA fallback - serve a simple HTML page so browser visitors see something useful

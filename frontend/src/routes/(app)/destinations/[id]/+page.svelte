@@ -10,7 +10,7 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog/index';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 	import StickyHeader from '$lib/components/StickyHeader.svelte';
-	import { ChevronLeft, Save, Trash2, Server, LayoutGrid, Box, Container } from '@lucide/svelte';
+	import { ChevronLeft, Save, Trash2, Server, LayoutGrid, Box, Container } from 'lucide-svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();

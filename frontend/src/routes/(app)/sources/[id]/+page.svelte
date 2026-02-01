@@ -8,7 +8,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import PageTitle from '$lib/components/PageTitle.svelte';
 	import StickyHeader from '$lib/components/StickyHeader.svelte';
-	import { Github, Gitlab, GitBranch, Search, ExternalLink, RefreshCw } from '@lucide/svelte';
+	import { Github, Gitlab, GitBranch, Search, ExternalLink, RefreshCw } from 'lucide-svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
