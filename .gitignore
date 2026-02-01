@@ -66,3 +66,14 @@ zig-out/
 zig/src/frontend_data.zig
 zig/src/frontend-embed/
 zig/frontend-embed/
+zig/debug.html
+zig/frontend/
+zig/server.log
+zig/build*.log
+*.log
+docker-build.log
+test_*.zig
+check_*.zig
+gen_*.zig
+reset_*.zig
+profile-preview.sh.backup
